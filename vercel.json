@@ -12,15 +12,24 @@
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/assets/:match*",
       "destination": {
-        "service": "backend"
+        "service": "frontend",
+        "path": "/assets/:match*"
       }
     },
     {
-      "source": "/(.*)",
+      "source": "/api/:match*",
       "destination": {
-        "service": "frontend"
+        "service": "backend",
+        "path": "/api/:match*"
+      }
+    },
+    {
+      "source": "/:match*",
+      "destination": {
+        "service": "frontend",
+        "path": "/"
       }
     }
   ]
