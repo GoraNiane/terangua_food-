@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Backend API RESTful & Realtime Socket.IO pour TERANGA FOOD SaaS",
-  "main": "dist/server.js",
+  "main": "src/server.ts",
   "scripts": {
     "build": "prisma generate && tsc",
+    "postinstall": "prisma generate",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "prisma:generate": "prisma generate",
@@ -21,7 +22,6 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "socket.io": "^4.8.1",
-    "teranga-food": "file:..",
     "zod": "^3.24.2"
   },
   "devDependencies": {
