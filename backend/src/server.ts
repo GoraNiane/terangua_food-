@@ -62,8 +62,9 @@ io.on('connection', socket => {
   });
 });
 
-// API Routes
+// API Routes (supporte les deux préfixes selon la réécriture Vercel)
 app.use('/api', apiRoutes);
+app.use('/', apiRoutes);
 
 // Health check
 app.get(['/health', '/api/health'], (req: Request, res: Response) => {
