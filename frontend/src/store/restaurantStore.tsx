@@ -194,12 +194,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const fetchBackendData = async () => {
       try {
         const token = getAuthToken();
-        const [menuRes, ordersRes, tablesRes, scheduleRes] = await Promise.all([
+        const [menuRes, scheduleRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/menu`).catch(() => null),
-          fetch(`${BACKEND_URL}/api/orders`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }).catch(() => null),
-          fetch(`${BACKEND_URL}/api/tables`).catch(() => null),
           fetch(`${BACKEND_URL}/api/menu/schedule`).catch(() => null),
         ]);
 
@@ -252,17 +248,27 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         }
 
-        if (ordersRes && ordersRes.ok) {
-          const ordersData = await ordersRes.json();
-          if (ordersData.orders && ordersData.orders.length > 0) {
-            setOrders(ordersData.orders);
-          }
-        }
+        // Si l'utilisateur est un membre d'équipe authentifié, synchroniser les commandes & tables
+        if (token) {
+          const [ordersRes, tablesRes] = await Promise.all([
+            fetch(`${BACKEND_URL}/api/orders`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).catch(() => null),
+            fetch(`${BACKEND_URL}/api/tables`).catch(() => null),
+          ]);
 
-        if (tablesRes && tablesRes.ok) {
-          const tablesData = await tablesRes.json();
-          if (tablesData.tables && tablesData.tables.length > 0) {
-            setTables(tablesData.tables);
+          if (ordersRes && ordersRes.ok) {
+            const ordersData = await ordersRes.json();
+            if (ordersData.orders && ordersData.orders.length > 0) {
+              setOrders(ordersData.orders);
+            }
+          }
+
+          if (tablesRes && tablesRes.ok) {
+            const tablesData = await tablesRes.json();
+            if (tablesData.tables && tablesData.tables.length > 0) {
+              setTables(tablesData.tables);
+            }
           }
         }
 
@@ -277,13 +283,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Connexion Socket.IO temps réel avec le serveur MariaDB
   useEffect(() => {
+    // Si on est sur Vercel sans WebSocket externe configuré, éviter de lancer des boucles de polling réseau
+    const isVercelWithoutWs =
+      typeof window !== 'undefined' &&
+      window.location.hostname.includes('vercel.app') &&
+      !import.meta.env.VITE_WS_URL;
+
+    if (isVercelWithoutWs) {
+      setIsOnline(true);
+      return;
+    }
+
     let socket: Socket | null = null;
     try {
       const token = getAuthToken();
       socket = socketIOClient(BACKEND_URL, {
         auth: { token },
-        reconnectionAttempts: 5,
-        timeout: 3000,
+        reconnectionAttempts: 2,
+        timeout: 2500,
+        transports: ['websocket', 'polling'],
       });
 
       socket.on('connect', () => {

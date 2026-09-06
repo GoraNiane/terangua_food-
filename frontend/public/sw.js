@@ -1,21 +1,18 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 1.0.0
+// Version: 2.0.0 (High Performance)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v1';
+const CACHE_NAME = 'teranga-pwa-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/pwa-icon-192.png',
-  '/pwa-icon-512.png',
-  '/apple-touch-icon.png',
   '/pwa-icon.svg',
   '/favicon.svg'
 ];
 
-// Installation : Mise en cache immédiate du shell d'application
+// Installation : Mise en cache ultra-rapide du shell d'application
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {

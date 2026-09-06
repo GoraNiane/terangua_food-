@@ -99,6 +99,7 @@ export const HeroCinematicCarousel: React.FC = () => {
                   loop
                   muted
                   playsInline
+                  preload="metadata"
                   poster={dish.posterUrl}
                   className="w-full h-full object-cover object-center"
                 >

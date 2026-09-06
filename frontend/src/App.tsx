@@ -1,40 +1,50 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { RestaurantProvider } from './store/restaurantStore';
 import { AuthProvider } from './store/authContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { PWAInstallBanner } from './components/common/PWAInstallBanner';
 
-// Client Pages (Public)
+// Pages Clientes Principales (Chargement Immédiat Prioritaire)
 import { ClientHomePage } from './pages/client/ClientHomePage';
 import { ClientMenuPage } from './pages/client/ClientMenuPage';
-import { ClientAboutPage } from './pages/client/ClientAboutPage';
-import { ClientPromotionsPage } from './pages/client/ClientPromotionsPage';
-import { ClientCheckoutPage } from './pages/client/ClientCheckoutPage';
-import { ClientOrderSuccessPage } from './pages/client/ClientOrderSuccessPage';
-import { ClientOrderTrackingPage } from './pages/client/ClientOrderTrackingPage';
-import { ClientReceiptPage } from './pages/client/ClientReceiptPage';
 
-// Kitchen Page (Espace Cuisine Dédié — 100% Isolé, Sans Prix)
-import { KitchenPage } from './pages/kitchen/KitchenPage';
+// Pages Clientes Secondaires (Chargement à la Demande)
+const ClientAboutPage = lazy(() => import('./pages/client/ClientAboutPage').then(m => ({ default: m.ClientAboutPage })));
+const ClientPromotionsPage = lazy(() => import('./pages/client/ClientPromotionsPage').then(m => ({ default: m.ClientPromotionsPage })));
+const ClientCheckoutPage = lazy(() => import('./pages/client/ClientCheckoutPage').then(m => ({ default: m.ClientCheckoutPage })));
+const ClientOrderSuccessPage = lazy(() => import('./pages/client/ClientOrderSuccessPage').then(m => ({ default: m.ClientOrderSuccessPage })));
+const ClientOrderTrackingPage = lazy(() => import('./pages/client/ClientOrderTrackingPage').then(m => ({ default: m.ClientOrderTrackingPage })));
+const ClientReceiptPage = lazy(() => import('./pages/client/ClientReceiptPage').then(m => ({ default: m.ClientReceiptPage })));
 
-// Admin Pages (Strictement Réservées au Gérant & Staff — 403 pour KITCHEN)
-import { AdminLoginPage } from './pages/admin/AdminLoginPage';
-import { AdminForgotPasswordPage } from './pages/admin/AdminForgotPasswordPage';
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { AdminMenuSchedulePage } from './pages/admin/AdminMenuSchedulePage';
-import { AdminSalesPage } from './pages/admin/AdminSalesPage';
-import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
-import { AdminTablesPage } from './pages/admin/AdminTablesPage';
-import { AdminProductsPage } from './pages/admin/AdminProductsPage';
-import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
-import { AdminPromotionsPage } from './pages/admin/AdminPromotionsPage';
-import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
-import { AdminStatisticsPage } from './pages/admin/AdminStatisticsPage';
-import { AdminInsightsPage } from './pages/admin/AdminInsightsPage';
-import { AdminScorePage } from './pages/admin/AdminScorePage';
-import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
-import { AdminQRCodePage } from './pages/admin/AdminQRCodePage';
-import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
-import { PWAInstallBanner } from './components/common/PWAInstallBanner';
+// Espace Cuisine (Chargement Séparé Dédié)
+const KitchenPage = lazy(() => import('./pages/kitchen/KitchenPage').then(m => ({ default: m.KitchenPage })));
+
+// Pages d'Administration (Lourdes bibliothèques graphiques isolées à la demande)
+const AdminLoginPage = lazy(() => import('./pages/admin/AdminLoginPage').then(m => ({ default: m.AdminLoginPage })));
+const AdminForgotPasswordPage = lazy(() => import('./pages/admin/AdminForgotPasswordPage').then(m => ({ default: m.AdminForgotPasswordPage })));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const AdminMenuSchedulePage = lazy(() => import('./pages/admin/AdminMenuSchedulePage').then(m => ({ default: m.AdminMenuSchedulePage })));
+const AdminSalesPage = lazy(() => import('./pages/admin/AdminSalesPage').then(m => ({ default: m.AdminSalesPage })));
+const AdminOrdersPage = lazy(() => import('./pages/admin/AdminOrdersPage').then(m => ({ default: m.AdminOrdersPage })));
+const AdminTablesPage = lazy(() => import('./pages/admin/AdminTablesPage').then(m => ({ default: m.AdminTablesPage })));
+const AdminProductsPage = lazy(() => import('./pages/admin/AdminProductsPage').then(m => ({ default: m.AdminProductsPage })));
+const AdminCategoriesPage = lazy(() => import('./pages/admin/AdminCategoriesPage').then(m => ({ default: m.AdminCategoriesPage })));
+const AdminPromotionsPage = lazy(() => import('./pages/admin/AdminPromotionsPage').then(m => ({ default: m.AdminPromotionsPage })));
+const AdminReviewsPage = lazy(() => import('./pages/admin/AdminReviewsPage').then(m => ({ default: m.AdminReviewsPage })));
+const AdminStatisticsPage = lazy(() => import('./pages/admin/AdminStatisticsPage').then(m => ({ default: m.AdminStatisticsPage })));
+const AdminInsightsPage = lazy(() => import('./pages/admin/AdminInsightsPage').then(m => ({ default: m.AdminInsightsPage })));
+const AdminScorePage = lazy(() => import('./pages/admin/AdminScorePage').then(m => ({ default: m.AdminScorePage })));
+const AdminCustomersPage = lazy(() => import('./pages/admin/AdminCustomersPage').then(m => ({ default: m.AdminCustomersPage })));
+const AdminQRCodePage = lazy(() => import('./pages/admin/AdminQRCodePage').then(m => ({ default: m.AdminQRCodePage })));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage').then(m => ({ default: m.AdminSettingsPage })));
+
+const PageLoadingFallback = () => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-3">
+    <div className="w-8 h-8 border-2 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+    <span className="text-xs font-semibold text-[#8A8A8A] tracking-wider uppercase">Chargement...</span>
+  </div>
+);
 
 export function App() {
   return (
@@ -43,7 +53,8 @@ export function App() {
         <BrowserRouter>
           {/* Bannière et gestion de l'état PWA (Installation & Hors-Ligne) */}
           <PWAInstallBanner />
-          <Routes>
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Routes>
             {/* --- EXPÉRIENCE DIGITALE CLIENT PUBLIQUE (TERANGA FOOD) --- */}
             <Route path="/" element={<ClientHomePage />} />
             <Route path="/menu" element={<ClientMenuPage />} />
@@ -216,6 +227,7 @@ export function App() {
             {/* Fallback automatique vers l'accueil public */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </RestaurantProvider>
