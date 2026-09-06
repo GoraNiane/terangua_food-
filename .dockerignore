@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.gitignore
+.env
+backend/.env
+frontend/.env
+*.log
+.system_generated
+dist
+frontend/dist
+backend/dist

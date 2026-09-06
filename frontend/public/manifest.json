@@ -1,0 +1,19 @@
+{
+  "name": "TERANGA FOOD — Restaurant Sénégalais",
+  "short_name": "TERANGA FOOD",
+  "description": "Menu digital interactif, commande à table et suivi en temps réel à Dakar.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

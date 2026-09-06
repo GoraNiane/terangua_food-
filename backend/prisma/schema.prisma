@@ -1,0 +1,288 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  KITCHEN
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  RESERVED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(STAFF)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RestaurantSettings {
+  id              String   @id @default("teranga-settings")
+  name            String   @default("TERANGA FOOD")
+  slogan          String   @default("Le goût du Sénégal, à chaque bouchée.")
+  description     String   @db.Text
+  address         String   @default("14 Rue Victor Schoelcher, Dakar-Plateau")
+  city            String   @default("Dakar")
+  phone           String   @default("+221 33 821 40 50")
+  whatsappNumber  String   @default("221774888464")
+  email           String   @default("contact@terangafood.sn")
+  openingHours    String   @default("11h30 — 23h30 (7j/7)")
+  currency        String   @default("FCFA")
+  tablesCount     Int      @default(20)
+  isOpen          Boolean  @default(true)
+  dineInEnabled   Boolean  @default(true)
+  takeawayEnabled Boolean  @default(true)
+  deliveryEnabled Boolean  @default(true)
+  logoUrl         String   @db.Text
+  coverUrl        String   @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Table {
+  id             String      @id @default(cuid())
+  number         String      @unique // "01", "02", etc.
+  capacity       Int         @default(4)
+  status         TableStatus @default(FREE)
+  area           String?     // Ex: "Salle Principale", "Terrasse", "Salon VIP"
+  currentOrderId String?
+  qrCodeUrl      String?     @db.Text
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  icon      String?   @default("🍲")
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+model Product {
+  id            String          @id @default(cuid())
+  categoryId    String
+  category      Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name          String
+  description   String          @db.Text
+  price         Int             // en FCFA
+  originalPrice Int?            // prix barré promo
+  imageUrl      String          @db.Text
+  videoUrl      String?         @db.Text // Lien vidéo MP4 ou streaming
+  isAvailable   Boolean         @default(true)
+  isFeatured    Boolean         @default(false)
+  badge         String?         // Chef, Populaire, Nouveau, Épicé
+  ingredients   String          @db.Text // JSON stringified array of ingredients
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  options       ProductOption[]
+  orderItems    OrderItem[]
+
+  @@index([categoryId])
+}
+
+model ProductOption {
+  id        String               @id @default(cuid())
+  productId String
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String               // Ex: "Accompagnement", "Sauce"
+  required  Boolean              @default(false)
+  minSelect Int                  @default(0)
+  maxSelect Int                  @default(1)
+  values    ProductOptionValue[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([productId])
+}
+
+model ProductOptionValue {
+  id         String        @id @default(cuid())
+  optionId   String
+  option     ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  name       String        // Ex: "Riz rouge", "Frites", "Alloco"
+  extraPrice Int           @default(0)
+  isDefault  Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([optionId])
+}
+
+model Customer {
+  id            String          @id @default(cuid())
+  name          String
+  phone         String          @unique
+  ordersCount   Int             @default(1)
+  totalSpent    Int             @default(0)
+  isVip         Boolean         @default(false)
+  loyaltyPoints Int             @default(10)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  loyalty       LoyaltyAccount?
+}
+
+model Order {
+  id              String               @id // ex: '1042'
+  customerName    String
+  customerPhone   String
+  orderType       OrderType            @default(DINE_IN)
+  tableNumber     String?              // '08'
+  deliveryAddress String?              @db.Text
+  notes           String?              @db.Text
+  subtotal        Int
+  deliveryFee     Int                  @default(0)
+  total           Int
+  status          OrderStatus          @default(PENDING)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  items           OrderItem[]
+  statusHistory   OrderStatusHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                  String            @id @default(cuid())
+  orderId             String
+  order               Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product           @relation(fields: [productId], references: [id])
+  name                String
+  quantity            Int               @default(1)
+  unitPrice           Int
+  totalPrice          Int
+  selectedOptionsText String?           @db.Text // Ex: "Riz rouge, Sauce piquante"
+  notes               String?           @db.Text
+  createdAt           DateTime          @default(now())
+  options             OrderItemOption[]
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderItemOption {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  optionName  String    // Ex: "Accompagnement"
+  valueName   String    // Ex: "Alloco"
+  extraPrice  Int       @default(0)
+
+  @@index([orderItemId])
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  changedAt DateTime    @default(now())
+  note      String?     @db.Text
+
+  @@index([orderId])
+}
+
+model Promotion {
+  id              String   @id @default(cuid())
+  title           String
+  description     String   @db.Text
+  discountPercent Int      @default(20)
+  targetProductId String?
+  targetCategory  String?
+  startTime       String?
+  endTime         String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model LoyaltyAccount {
+  id           String               @id @default(cuid())
+  customerId   String               @unique
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  points       Int                  @default(0)
+  tier         String               @default("Bronze") // Bronze, Silver, Gold
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  transactions LoyaltyTransaction[]
+}
+
+model LoyaltyTransaction {
+  id          String         @id @default(cuid())
+  accountId   String
+  account     LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  orderId     String?
+  points      Int
+  description String         @db.Text
+  createdAt   DateTime       @default(now())
+
+  @@index([accountId])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  orderId      String
+  customerName String
+  rating       Int      @default(5)
+  comment      String   @db.Text
+  reply        String?  @db.Text
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String   @db.Text
+  type      String   @default("ORDER") // ORDER, SYSTEM, ALERT
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model DailyMenuSchedule {
+  id           String   @id @default(cuid())
+  dayOfWeek    Int      @unique // 0 = Dimanche, 1 = Lundi, 2 = Mardi, ..., 6 = Samedi
+  dayName      String   // "Lundi", "Mardi", etc.
+  themeTitle   String   // Ex: "Vendredi Saint-Louis — Thiéboudienne Pêcheur"
+  description  String?  @db.Text
+  specialPrice Int?     // Prix promo du jour éventuel
+  specialNote  String?  // Ex: "1 verre de Bissap artisanal offert !"
+  productIds   String   @db.Text // JSON stringified array of product IDs
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

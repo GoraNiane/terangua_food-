@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+/* Custom smooth minimalist scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #FAFAFA;
+}
+::-webkit-scrollbar-thumb {
+  background: #E0E0E0;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0A0A0A;
+}
+
+/* Minimalist light panel helpers */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid #EAEAEA;
+}
+
+.glass-nav {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid #EAEAEA;
+}
+
+.glass-card {
+  background: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+}
+
+.glass-card:hover {
+  border-color: #0A0A0A;
+}
+
+.gold-gradient-text {
+  color: #0A0A0A;
+}
+
+.gold-gradient-bg {
+  background: #0A0A0A;
+  color: #FFFFFF;
+}
+
+.gold-gradient-subtle {
+  background: transparent;
+}
+
+/* Hide scrollbar for category pills swipe */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Print styles for QR Code Stand */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-stand, #printable-stand *,
+  #printable-thermal-receipt, #printable-thermal-receipt *,
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-stand {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 480px;
+    margin: 0 auto;
+    border: 2px solid #0A0A0A !important;
+    background: #FFFFFF !important;
+    color: #0A0A0A !important;
+    box-shadow: none !important;
+    padding: 2.5rem !important;
+  }
+  #printable-receipt {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 440px;
+    margin: 0 auto;
+    border: 1px solid #0A0A0A !important;
+    background: #FFFFFF !important;
+    color: #0A0A0A !important;
+    box-shadow: none !important;
+    padding: 1.5rem !important;
+  }
+  #printable-thermal-receipt {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    border: none !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Continuous Horizontal Marquee Animation */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 55s linear infinite;
+  will-change: transform;
+}
+
+@media (max-width: 639px) {
+  .animate-marquee {
+    animation-duration: 48s;
+  }
+}
+
+/* Pause marquee on hover for desktop pointers */
+@media (hover: hover) and (pointer: fine) {
+  .marquee-group:hover .animate-marquee {
+    animation-play-state: paused;
+  }
+}
+
+/* Accessibility: respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-group {
+    overflow-x: auto;
+  }
+  .animate-marquee {
+    animation: none !important;
+    transform: none !important;
+  }
+}

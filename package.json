@@ -1,0 +1,29 @@
+{
+  "name": "teranga-food",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TERANGA FOOD - Plateforme Digitale Haute Gastronomie Sénégalaise (GORATECH)",
+  "scripts": {
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix backend install && npm --prefix backend run build && npm --prefix frontend install && npm --prefix frontend run build",
+    "start": "node backend/dist/server.js",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:start": "npm --prefix backend start",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "db:push": "npx --prefix backend prisma db push",
+    "db:seed": "npm --prefix backend run seed"
+  },
+  "keywords": [
+    "restaurant",
+    "senegal",
+    "dakar",
+    "teranga-food",
+    "kds",
+    "qr-code",
+    "goratech"
+  ],
+  "author": "GORATECH",
+  "license": "UNLICENSED"
+}
