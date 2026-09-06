@@ -9,11 +9,16 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Register PWA Service Worker
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.debug('ServiceWorker registration optional:', err);
-    });
+// Désactivation et purge des anciens caches de ServiceWorker pour garantir la dernière version
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
   });
+  if ('caches' in window) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => caches.delete(key));
+    });
+  }
 }

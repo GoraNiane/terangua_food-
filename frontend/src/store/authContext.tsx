@@ -87,13 +87,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
 
     const cleanEmail = email.toLowerCase().trim();
+    const cleanPass = (pass || '').trim();
     const demoAcc = DEMO_ACCOUNTS[cleanEmail];
+    const isDemoPass = demoAcc && (demoAcc.pass === cleanPass || demoAcc.pass.toLowerCase() === cleanPass.toLowerCase());
 
     try {
       const response = await fetch(ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password: pass }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
       });
 
       const data = await response.json().catch(() => null);
@@ -115,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Si le backend renvoie une erreur mais que ce sont les identifiants préconfigurés
-      if (demoAcc && demoAcc.pass === pass) {
+      if (demoAcc && isDemoPass) {
         const mockToken = `demo_token_${demoAcc.user.role.toLowerCase()}_${Date.now()}`;
         const storage = rememberMe ? localStorage : sessionStorage;
         storage.setItem(TOKEN_KEY, mockToken);
@@ -134,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     } catch {
       // Si le serveur distant ne répond pas, autoriser les comptes de démonstration
-      if (demoAcc && demoAcc.pass === pass) {
+      if (demoAcc && isDemoPass) {
         const mockToken = `demo_token_${demoAcc.user.role.toLowerCase()}_${Date.now()}`;
         const storage = rememberMe ? localStorage : sessionStorage;
         storage.setItem(TOKEN_KEY, mockToken);
