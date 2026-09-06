@@ -145,8 +145,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: 'Erreur interne du serveur', message: err.message });
 });
 
-// Start Server
-if (process.env.NODE_ENV !== 'test') {
+// Start Server (uniquement en local ou serveur dédié, pas sur Vercel serverless)
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   const port = Number(config.port) || 5000;
   server.listen(port, '0.0.0.0', () => {
     console.log(`✨ TERANGA FOOD API Server running on http://0.0.0.0:${port}`);
@@ -154,5 +154,10 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-export { app, server, io };
+// Export pour Vercel Serverless (évite l'avertissement MIXED_EXPORTS)
 export default app;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = app;
+  (module.exports as any).default = app;
+}
+

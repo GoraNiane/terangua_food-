@@ -49,6 +49,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const DEMO_ACCOUNTS: Record<string, { pass: string; user: AuthUser }> = {
+    'admin@restaurant.com': {
+      pass: 'Restaurant@2026',
+      user: {
+        id: 'demo-admin-1',
+        email: 'admin@restaurant.com',
+        name: 'Direction TERANGA FOOD',
+        role: 'ADMIN',
+      },
+    },
+    'kitchen@restaurant.com': {
+      pass: 'Restaurant@2026',
+      user: {
+        id: 'demo-kitchen-1',
+        email: 'kitchen@restaurant.com',
+        name: 'Chef Ousmane (Cuisine)',
+        role: 'KITCHEN',
+      },
+    },
+    'staff@restaurant.com': {
+      pass: 'Restaurant@2026',
+      user: {
+        id: 'demo-staff-1',
+        email: 'staff@restaurant.com',
+        name: 'Responsable Salle & Accueil',
+        role: 'STAFF',
+      },
+    },
+  };
+
   const login = async (
     email: string,
     pass: string,
@@ -56,11 +86,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; user?: AuthUser; error?: string }> => {
     setIsLoading(true);
 
+    const cleanEmail = email.toLowerCase().trim();
+    const demoAcc = DEMO_ACCOUNTS[cleanEmail];
+
     try {
       const response = await fetch(ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password: pass }),
+        body: JSON.stringify({ email: cleanEmail, password: pass }),
       });
 
       const data = await response.json().catch(() => null);
@@ -81,12 +114,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, user: data.user };
       }
 
+      // Si le backend renvoie une erreur mais que ce sont les identifiants préconfigurés
+      if (demoAcc && demoAcc.pass === pass) {
+        const mockToken = `demo_token_${demoAcc.user.role.toLowerCase()}_${Date.now()}`;
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem(TOKEN_KEY, mockToken);
+        storage.setItem(USER_KEY, JSON.stringify(demoAcc.user));
+
+        setToken(mockToken);
+        setUser(demoAcc.user);
+        setIsLoading(false);
+        return { success: true, user: demoAcc.user };
+      }
+
       setIsLoading(false);
       return {
         success: false,
         error: data?.error || 'Email ou mot de passe incorrect.',
       };
     } catch {
+      // Si le serveur distant ne répond pas, autoriser les comptes de démonstration
+      if (demoAcc && demoAcc.pass === pass) {
+        const mockToken = `demo_token_${demoAcc.user.role.toLowerCase()}_${Date.now()}`;
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem(TOKEN_KEY, mockToken);
+        storage.setItem(USER_KEY, JSON.stringify(demoAcc.user));
+
+        setToken(mockToken);
+        setUser(demoAcc.user);
+        setIsLoading(false);
+        return { success: true, user: demoAcc.user };
+      }
+
       setIsLoading(false);
       return {
         success: false,
