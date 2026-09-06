@@ -34,12 +34,15 @@ import { AdminScorePage } from './pages/admin/AdminScorePage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
 import { AdminQRCodePage } from './pages/admin/AdminQRCodePage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
+import { PWAInstallBanner } from './components/common/PWAInstallBanner';
 
 export function App() {
   return (
     <RestaurantProvider>
       <AuthProvider>
         <BrowserRouter>
+          {/* Bannière et gestion de l'état PWA (Installation & Hors-Ligne) */}
+          <PWAInstallBanner />
           <Routes>
             {/* --- EXPÉRIENCE DIGITALE CLIENT PUBLIQUE (TERANGA FOOD) --- */}
             <Route path="/" element={<ClientHomePage />} />

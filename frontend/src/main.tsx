@@ -9,16 +9,28 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Désactivation et purge des anciens caches de ServiceWorker pour garantir la dernière version
+// Enregistrement officiel du Service Worker PWA TERANGA FOOD (Mode Standalone & Hors-ligne)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.unregister();
-    }
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        console.log('[PWA] Service Worker actif, scope:', registration.scope);
+
+        // Détecter si une mise à jour est disponible
+        registration.addEventListener('updatefound', () => {
+          const installingWorker = registration.installing;
+          if (installingWorker) {
+            installingWorker.addEventListener('statechange', () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[PWA] Nouvelle version prête.');
+              }
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn('[PWA] Enregistrement Service Worker reporté:', err);
+      });
   });
-  if ('caches' in window) {
-    caches.keys().then((keys) => {
-      keys.forEach((key) => caches.delete(key));
-    });
-  }
 }

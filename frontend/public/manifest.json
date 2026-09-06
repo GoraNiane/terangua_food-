@@ -1,19 +1,102 @@
 {
-  "name": "TERANGA FOOD — Restaurant Sénégalais",
+  "name": "TERANGA FOOD — Haute Gastronomie Sénégalaise",
   "short_name": "TERANGA FOOD",
   "description": "Menu digital interactif, commande à table et suivi en temps réel à Dakar.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "window-controls-overlay"
+  ],
   "orientation": "portrait-primary",
-  "background_color": "#FFFFFF",
+  "background_color": "#0A0A0A",
   "theme_color": "#0A0A0A",
+  "lang": "fr-FR",
+  "dir": "ltr",
+  "categories": [
+    "food",
+    "restaurant",
+    "shopping",
+    "lifestyle"
+  ],
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa-icon.svg",
       "sizes": "192x192 512x512",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x48 96x96",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Menu Digital",
+      "short_name": "Menu",
+      "description": "Découvrir la carte et les spécialités",
+      "url": "/menu",
+      "icons": [
+        {
+          "src": "/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Écran Cuisine (KDS)",
+      "short_name": "Cuisine",
+      "description": "Accès direct aux commandes en cuisine",
+      "url": "/kitchen",
+      "icons": [
+        {
+          "src": "/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Administration",
+      "short_name": "Admin",
+      "description": "Tableau de bord et gestion du restaurant",
+      "url": "/admin/login",
+      "icons": [
+        {
+          "src": "/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
