@@ -23,24 +23,24 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#EEEEEE] px-4 sm:px-8 py-3.5 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#EEEEEE] px-3 sm:px-8 py-2.5 sm:py-3.5 flex flex-col gap-2 w-full max-w-full overflow-x-clip">
+      <div className="flex items-center justify-between gap-2 min-w-0 w-full">
         {/* Left: Mobile hamburger & title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={onOpenMobileMenu}
             aria-label="Menu"
-            className="md:hidden w-9 h-9 rounded-xl bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center text-[#0A0A0A]"
+            className="md:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-center text-[#0A0A0A] shrink-0"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          <div>
-            <h1 className="font-sans font-bold text-lg sm:text-xl text-[#0A0A0A]">
+          <div className="min-w-0">
+            <h1 className="font-sans font-bold text-sm sm:text-lg lg:text-xl text-[#0A0A0A] truncate">
               {title}
             </h1>
             {subtitle && (
-              <p className="text-xs text-[#8A8A8A] hidden sm:block">
+              <p className="text-[10px] sm:text-xs text-[#8A8A8A] hidden sm:block truncate">
                 {subtitle}
               </p>
             )}
@@ -48,7 +48,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         </div>
 
         {/* Right: Quick actions, Language & Profile */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Language Switcher */}
           <div className="flex items-center bg-[#FAFAFA] border border-[#EAEAEA] rounded-full p-0.5 text-[10px] font-bold">
             {(['fr', 'en', 'wo'] as const).map(l => (
