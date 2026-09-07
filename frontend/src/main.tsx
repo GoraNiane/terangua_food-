@@ -23,14 +23,26 @@ if ('serviceWorker' in navigator) {
           if (installingWorker) {
             installingWorker.addEventListener('statechange', () => {
               if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] Nouvelle version prête.');
+                console.log('[PWA] Nouvelle version v3 prête. Mise à jour automatique.');
               }
             });
+          }
+        });
+
+        // Forcer la vérification de mise à jour au retour sur l'onglet
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            registration.update().catch(() => {});
           }
         });
       })
       .catch((err) => {
         console.warn('[PWA] Enregistrement Service Worker reporté:', err);
       });
+
+    // Prise de contrôle transparente par le nouveau worker
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('[PWA] Nouveau Service Worker activé avec succès.');
+    });
   });
 }
