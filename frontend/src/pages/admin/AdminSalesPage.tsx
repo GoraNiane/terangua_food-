@@ -67,162 +67,65 @@ export const AdminSalesPage: React.FC = () => {
         const data = await res.json();
         setSalesData(data);
       } else {
-        // Fallback local réaliste basé sur les commandes de la session en cours
-        calculateLocalFallback();
+        setSalesData({
+          period,
+          kpis: {
+            totalRevenue: 0,
+            ordersCount: 0,
+            salesCount: 0,
+            averageBasket: 0,
+            totalProductsSold: 0,
+            evolutionPercent: 0,
+            topProduct: 'Aucun',
+            topCategory: 'N/A',
+            bestHour: '--',
+            bestDay: '--',
+          },
+          topProducts: [],
+          sales: [],
+          groupedBlocks: [],
+          charts: { hourly: [], daily: [], evolution: [] },
+        });
       }
-    } catch {
-      calculateLocalFallback();
+    } catch (err) {
+      console.error('Failed to fetch sales:', err);
+      setSalesData({
+        period,
+        kpis: {
+          totalRevenue: 0,
+          ordersCount: 0,
+          salesCount: 0,
+          averageBasket: 0,
+          totalProductsSold: 0,
+          evolutionPercent: 0,
+          topProduct: 'Aucun',
+          topCategory: 'N/A',
+          bestHour: '--',
+          bestDay: '--',
+        },
+        topProducts: [],
+        sales: [],
+        groupedBlocks: [],
+        charts: { hourly: [], daily: [], evolution: [] },
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fallback local synchronisé avec les données du restaurant pour une démonstration fluide
-  const calculateLocalFallback = () => {
-    // Valeurs conformes au cahier des charges : 285 000 FCFA, 47 commandes, panier moyen 6 063 FCFA
-    const fallbackKpis = {
-      totalRevenue: 285000,
-      ordersCount: 47,
-      averageBasket: 6063,
-      totalProductsSold: 118,
-      topProduct: 'Thiéboudienne Penda Mbaye',
-      topCategory: 'Plats Sénégalais',
-      bestHour: '14h00',
-      bestDay: 'Aujourd’hui',
-      evolutionPercent: 18.4,
-    };
-
-    const fallbackCharts = {
-      hourly: [
-        { label: '11h', orders: 2, revenue: 11000 },
-        { label: '12h', orders: 5, revenue: 28500 },
-        { label: '13h', orders: 9, revenue: 54000 },
-        { label: '14h', orders: 12, revenue: 76500 },
-        { label: '15h', orders: 3, revenue: 16500 },
-        { label: '19h', orders: 4, revenue: 24000 },
-        { label: '20h', orders: 6, revenue: 38000 },
-        { label: '21h', orders: 5, revenue: 32000 },
-        { label: '22h', orders: 1, revenue: 4500 },
-      ],
-      daily: [
-        { label: 'Lun', orders: 41, revenue: 248000 },
-        { label: 'Mar', orders: 38, revenue: 231000 },
-        { label: 'Mer', orders: 45, revenue: 272000 },
-        { label: 'Jeu', orders: 44, revenue: 268000 },
-        { label: 'Ven', orders: 53, revenue: 328000 },
-        { label: 'Sam', orders: 58, revenue: 362000 },
-        { label: 'Dim', orders: 47, revenue: 285000 },
-      ],
-    };
-
-    const fallbackSales = [
-      {
-        id: '1048',
-        orderNumber: '#TF-1048',
-        date: '05/09/2026',
-        time: '13:42',
-        tableNumber: '08',
-        orderType: 'DINE_IN',
-        customerName: 'Mamadou Diallo',
-        itemsSummary: 'Yassa Poulet ×2 + Bissap ×1',
-        total: 12000,
-        subtotal: 12000,
-        deliveryFee: 0,
-        itemsCount: 3,
-        items: [
-          { name: 'Yassa Poulet Fermier', quantity: 2, unitPrice: 5500, totalPrice: 11000, selectedOptionsText: 'Riz, Sauce maison' },
-          { name: 'Jus de Bissap Royal', quantity: 1, unitPrice: 1000, totalPrice: 1000 },
-        ],
-        status: 'SERVED',
-        statusHistory: [
-          { status: 'PENDING', changedAt: '2026-09-05T13:42:00Z', note: 'Commande reçue' },
-          { status: 'CONFIRMED', changedAt: '2026-09-05T13:43:10Z', note: 'Acceptée par la cuisine' },
-          { status: 'PREPARING', changedAt: '2026-09-05T13:44:05Z', note: 'En cuisson' },
-          { status: 'READY', changedAt: '2026-09-05T13:57:30Z', note: 'Prête au passe' },
-          { status: 'SERVED', changedAt: '2026-09-05T14:02:15Z', note: 'Commande remise au client — Vente finalisée' },
-        ],
-      },
-      {
-        id: '1047',
-        orderNumber: '#TF-1047',
-        date: '05/09/2026',
-        time: '13:21',
-        tableNumber: '04',
-        orderType: 'DINE_IN',
-        customerName: 'Aïssatou Ndiaye',
-        itemsSummary: 'Mafé au Bœuf ×1',
-        total: 5000,
-        subtotal: 5000,
-        deliveryFee: 0,
-        itemsCount: 1,
-        items: [
-          { name: 'Mafé au Bœuf Tendre', quantity: 1, unitPrice: 5000, totalPrice: 5000, selectedOptionsText: 'Riz blanc' },
-        ],
-        status: 'SERVED',
-        statusHistory: [
-          { status: 'PENDING', changedAt: '2026-09-05T13:21:00Z', note: 'Commande reçue' },
-          { status: 'CONFIRMED', changedAt: '2026-09-05T13:22:00Z', note: 'Acceptée' },
-          { status: 'PREPARING', changedAt: '2026-09-05T13:23:00Z', note: 'Préparation' },
-          { status: 'READY', changedAt: '2026-09-05T13:38:00Z', note: 'Prête' },
-          { status: 'SERVED', changedAt: '2026-09-05T13:41:00Z', note: 'Servie' },
-        ],
-      },
-      {
-        id: '1046',
-        orderNumber: '#TF-1046',
-        date: '05/09/2026',
-        time: '12:58',
-        tableNumber: '12',
-        orderType: 'DINE_IN',
-        customerName: 'Cheikh Sarr',
-        itemsSummary: 'Thiéboudienne ×2',
-        total: 13000,
-        subtotal: 13000,
-        deliveryFee: 0,
-        itemsCount: 2,
-        items: [
-          { name: 'Thiéboudienne Penda Mbaye', quantity: 2, unitPrice: 6500, totalPrice: 13000, selectedOptionsText: 'Riz rouge' },
-        ],
-        status: 'SERVED',
-        statusHistory: [
-          { status: 'PENDING', changedAt: '2026-09-05T12:58:00Z', note: 'Commande reçue' },
-          { status: 'CONFIRMED', changedAt: '2026-09-05T12:59:00Z', note: 'Acceptée' },
-          { status: 'PREPARING', changedAt: '2026-09-05T13:00:00Z', note: 'Préparation' },
-          { status: 'READY', changedAt: '2026-09-05T13:16:00Z', note: 'Prête' },
-          { status: 'SERVED', changedAt: '2026-09-05T13:19:00Z', note: 'Servie' },
-        ],
-      },
-    ];
-
-    setSalesData({
-      period,
-      kpis: fallbackKpis,
-      topProducts: [
-        { name: 'Thiéboudienne Penda Mbaye', quantity: 142, revenue: 923000 },
-        { name: 'Yassa Poulet Fermier', quantity: 118, revenue: 649000 },
-        { name: 'Mafé au Bœuf Tendre', quantity: 96, revenue: 480000 },
-        { name: 'Burger Teranga', quantity: 74, revenue: 333000 },
-      ],
-      sales: fallbackSales,
-      groupedBlocks: [
-        { key: '2026-09-05', label: '05 septembre 2026', ordersCount: 47, revenue: 285000, averageBasket: 6063 },
-        { key: '2026-09-04', label: '04 septembre 2026', ordersCount: 52, revenue: 318500, averageBasket: 6125 },
-        { key: '2026-09-03', label: '03 septembre 2026', ordersCount: 43, revenue: 262000, averageBasket: 6093 },
-      ],
-      charts: fallbackCharts,
-    });
-  };
-
   useEffect(() => {
     fetchSales();
+    const interval = setInterval(fetchSales, 15000);
+    return () => clearInterval(interval);
   }, [period, activeView]);
 
   const kpis = salesData?.kpis || {
-    totalRevenue: 285000,
-    ordersCount: 47,
-    averageBasket: 6063,
-    totalProductsSold: 118,
-    evolutionPercent: 18.4,
+    totalRevenue: 0,
+    ordersCount: 0,
+    averageBasket: 0,
+    totalProductsSold: 0,
+    evolutionPercent: 0,
+    topProduct: 'Aucun',
   };
 
   const periodButtons = [
@@ -574,29 +477,35 @@ export const AdminSalesPage: React.FC = () => {
               Classement des Plats les Plus Vendus
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {(salesData?.topProducts || []).map((prod: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-2xl bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-[#0A0A0A] text-white font-black text-xs flex items-center justify-center">
-                      {idx + 1}
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-[#0A0A0A] block truncate max-w-[130px]">
-                        {prod.name}
-                      </span>
-                      <span className="text-[11px] text-[#888888]">
-                        {prod.quantity} vendus
-                      </span>
-                    </div>
-                  </div>
-                  <span className="font-mono font-extrabold text-xs text-[#0A0A0A]">
-                    {formatFCFA(prod.revenue)}
-                  </span>
+              {(salesData?.topProducts || []).length === 0 ? (
+                <div className="col-span-full py-8 text-center text-xs text-[#888888]">
+                  Aucun produit vendu sur cette période.
                 </div>
-              ))}
+              ) : (
+                (salesData?.topProducts || []).map((prod: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-2xl bg-[#FAFAFA] border border-[#EAEAEA] flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-[#0A0A0A] text-white font-black text-xs flex items-center justify-center">
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-[#0A0A0A] block truncate max-w-[130px]">
+                          {prod.name}
+                        </span>
+                        <span className="text-[11px] text-[#888888]">
+                          {prod.quantity} vendus
+                        </span>
+                      </div>
+                    </div>
+                    <span className="font-mono font-extrabold text-xs text-[#0A0A0A]">
+                      {formatFCFA(prod.revenue)}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </main>

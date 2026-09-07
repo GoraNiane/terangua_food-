@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -20,94 +20,83 @@ import {
   PieChart as PieIcon,
   Filter,
   Calendar,
+  RefreshCw,
 } from 'lucide-react';
-import { useRestaurantStore } from '../../store/restaurantStore';
+import { useAuth } from '../../store/authContext';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminSidebar } from '../../components/admin/AdminSidebar';
 import { StatCard } from '../../components/admin/StatCard';
 import { formatFCFA } from '../../services/whatsappService';
+import { ENDPOINTS } from '../../config/api';
 
 type PeriodType = 'today' | '7days' | '30days' | '3months' | 'custom';
 
 export const AdminStatisticsPage: React.FC = () => {
-  const { orders } = useRestaurantStore();
+  const { token } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [period, setPeriod] = useState<PeriodType>('today');
+  const [stats, setStats] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const totalRevenue = orders.reduce((s, o) => s + (o.status !== 'CANCELLED' ? o.total : 0), 0);
-  const totalItemsSold = orders.reduce(
-    (s, o) => s + o.items.reduce((sum, item) => sum + item.quantity, 0),
-    0
-  );
-  const avgBasket = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 8250;
+  const fetchStats = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const authToken = token || localStorage.getItem('teranga_auth_token');
+      const res = await fetch(`${ENDPOINTS.STATISTICS}?period=${period}`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      } else {
+        setStats(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch statistics:', err);
+      setStats(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [period, token]);
 
-  // Peak hours data (Section 43)
-  const peakHoursData = [
-    { hour: '11h', commandes: 4, bar: '██' },
-    { hour: '12h', commandes: 16, bar: '█████' },
-    { hour: '13h', commandes: 28, bar: '███████' },
-    { hour: '14h', commandes: 12, bar: '███' },
-    { hour: '15h', commandes: 6, bar: '██' },
-    { hour: '18h', commandes: 10, bar: '███' },
-    { hour: '19h', commandes: 32, bar: '█████████' },
-    { hour: '20h', commandes: 44, bar: '███████████', isPeak: true },
-    { hour: '21h', commandes: 26, bar: '███████' },
-    { hour: '22h', commandes: 14, bar: '████' },
-  ];
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 15000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
-  // Sales Trend based on filter period
-  const trendDataToday = [
-    { label: '11h', ca: 15000, commandes: 3 },
-    { label: '12h', ca: 48000, commandes: 9 },
-    { label: '13h', ca: 72000, commandes: 14 },
-    { label: '14h', ca: 39000, commandes: 7 },
-    { label: '18h', ca: 24000, commandes: 5 },
-    { label: '19h', ca: 68000, commandes: 13 },
-    { label: '20h', ca: 95000, commandes: 18 },
-    { label: '21h', ca: 62000, commandes: 12 },
-    { label: '22h', ca: 32000, commandes: 6 },
-  ];
+  const kpis = stats?.kpis || {
+    totalRevenue: 0,
+    ordersCount: 0,
+    salesCount: 0,
+    averageBasket: 0,
+    itemsSold: 0,
+    revenueEvolutionPercent: 0,
+    ordersEvolutionPercent: 0,
+    basketEvolutionPercent: 0,
+    itemsEvolutionPercent: 0,
+  };
 
-  const trendData7Days = [
-    { label: 'Lun', ca: 210000, commandes: 42 },
-    { label: 'Mar', ca: 245000, commandes: 48 },
-    { label: 'Mer', ca: 280000, commandes: 55 },
-    { label: 'Jeu', ca: 295000, commandes: 58 },
-    { label: 'Ven', ca: 420000, commandes: 82 },
-    { label: 'Sam', ca: 490000, commandes: 96 },
-    { label: 'Dim', ca: 440000, commandes: 88 },
-  ];
+  const activeTrendData = stats?.charts?.evolution || [];
+  const topDishes = (stats?.charts?.topProducts || []).map((prod: any, idx: number) => ({
+    rank: idx + 1,
+    name: prod.name,
+    sales: prod.sales,
+    ca: prod.revenue || prod.sales * (prod.price || 0),
+    evolution: `${prod.sales} ventes`,
+  }));
 
-  const trendData30Days = [
-    { label: 'Sem 1', ca: 1650000, commandes: 320 },
-    { label: 'Sem 2', ca: 1820000, commandes: 355 },
-    { label: 'Sem 3', ca: 2100000, commandes: 410 },
-    { label: 'Sem 4', ca: 2350000, commandes: 460 },
-  ];
+  const peakHoursData = (stats?.charts?.peakHours || []).map((ph: any) => ({
+    hour: ph.hour,
+    commandes: ph.orders || 0,
+    bar: '█'.repeat(Math.max(1, Math.min(12, ph.orders || 1))),
+    isPeak: ph.level === 4,
+    label: ph.label,
+  }));
 
-  const trendData3Months = [
-    { label: 'Mois 1', ca: 7450000, commandes: 1450 },
-    { label: 'Mois 2', ca: 8200000, commandes: 1620 },
-    { label: 'Mois 3', ca: 9100000, commandes: 1780 },
-  ];
-
-  const activeTrendData =
-    period === 'today'
-      ? trendDataToday
-      : period === '7days'
-      ? trendData7Days
-      : period === '30days'
-      ? trendData30Days
-      : trendData3Months;
-
-  // Top Selling Dishes (Section 42)
-  const topDishes = [
-    { rank: 1, name: 'Poulet Braisé Teranga', sales: 45, ca: 202500, evolution: '+18,5%' },
-    { rank: 2, name: 'Thiéboudienne Penda Mbaye', sales: 38, ca: 171000, evolution: '+12,0%' },
-    { rank: 3, name: 'Burger Dakar Signature', sales: 32, ca: 112000, evolution: '+24,2%' },
-    { rank: 4, name: 'Yassa Poulet Fermier', sales: 26, ca: 104000, evolution: '+8,4%' },
-    { rank: 5, name: 'Jus de Bissap Royal', sales: 58, ca: 58000, evolution: '+15,0%' },
-  ];
+  const bestPeak = peakHoursData.find((p: any) => p.isPeak) || peakHoursData[0] || null;
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-[#0A0A0A] flex">
@@ -135,7 +124,7 @@ export const AdminStatisticsPage: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <AdminHeader
           title="Statistiques Commerciales"
-          subtitle="Analyse financière, heures de pointe et performance des plats"
+          subtitle="Analyse financière, heures de pointe et performance des plats (100% données réelles)"
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
 
@@ -154,7 +143,6 @@ export const AdminStatisticsPage: React.FC = () => {
                   { id: '7days', label: '7 jours' },
                   { id: '30days', label: '30 jours' },
                   { id: '3months', label: '3 mois' },
-                  { id: 'custom', label: 'Personnalisé' },
                 ] as const
               ).map(tab => (
                 <button
@@ -169,40 +157,50 @@ export const AdminStatisticsPage: React.FC = () => {
                   {tab.label}
                 </button>
               ))}
+
+              <button
+                onClick={() => fetchStats()}
+                disabled={isLoading}
+                className="ml-2 px-3 py-1.5 rounded-xl bg-white border border-[#EAEAEA] hover:bg-[#FAFAFA] text-xs font-bold text-[#0A0A0A] inline-flex items-center gap-1.5 shadow-xs"
+                title="Rafraîchir"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Rafraîchir</span>
+              </button>
             </div>
           </div>
 
-          {/* Section 40: 4 Grands KPIs */}
+          {/* Section 40: 4 Grands KPIs Réels */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Chiffre d'affaires"
-              value={formatFCFA(totalRevenue || 245000)}
-              evolution="+12,5 %"
-              isPositive={true}
+              value={formatFCFA(kpis.totalRevenue)}
+              evolution={`${kpis.revenueEvolutionPercent >= 0 ? '+' : ''}${kpis.revenueEvolutionPercent.toFixed(1)} %`}
+              isPositive={kpis.revenueEvolutionPercent >= 0}
               icon={DollarSign}
-              subtitle="vs. période précédente"
+              subtitle="Commandes servies exclusivement"
             />
             <StatCard
               title="Commandes"
-              value={String(orders.length || 68)}
-              evolution="+8,2 %"
-              isPositive={true}
+              value={String(kpis.ordersCount)}
+              evolution={`${kpis.ordersEvolutionPercent >= 0 ? '+' : ''}${kpis.ordersEvolutionPercent.toFixed(1)} %`}
+              isPositive={kpis.ordersEvolutionPercent >= 0}
               icon={ShoppingBag}
               subtitle="Toutes tables & emporter"
             />
             <StatCard
               title="Panier moyen"
-              value={formatFCFA(avgBasket || 8250)}
-              evolution="+4,1 %"
-              isPositive={true}
+              value={formatFCFA(kpis.averageBasket)}
+              evolution={`${kpis.basketEvolutionPercent >= 0 ? '+' : ''}${kpis.basketEvolutionPercent.toFixed(1)} %`}
+              isPositive={kpis.basketEvolutionPercent >= 0}
               icon={TrendingUp}
-              subtitle="Ticket moyen par client"
+              subtitle="Ticket moyen par table servie"
             />
             <StatCard
               title="Produits vendus"
-              value={String(totalItemsSold || 142)}
-              evolution="+16,4 %"
-              isPositive={true}
+              value={String(kpis.itemsSold)}
+              evolution={`${kpis.itemsEvolutionPercent >= 0 ? '+' : ''}${kpis.itemsEvolutionPercent.toFixed(1)} %`}
+              isPositive={kpis.itemsEvolutionPercent >= 0}
               icon={Award}
               subtitle="Portions et boissons servies"
             />
@@ -216,46 +214,52 @@ export const AdminStatisticsPage: React.FC = () => {
                   ÉVOLUTION DES VENTES (FCFA)
                 </h3>
                 <p className="text-xs text-[#888888]">
-                  Chiffre d'affaires et volume des commandes selon la période sélectionnée
+                  Chiffre d'affaires et volume des commandes réelles selon la période sélectionnée
                 </p>
               </div>
               <span className="text-xs font-mono font-bold bg-[#F5F5F5] px-3 py-1 rounded-full text-[#0A0A0A]">
-                Palette Monochrome GORATECH
+                Données Réelles DB
               </span>
             </div>
 
             <div className="h-72 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={activeTrendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCA" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0A0A0A" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#0A0A0A" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EEEEEE" vertical={false} />
-                  <XAxis dataKey="label" stroke="#888888" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      borderColor: '#0A0A0A',
-                      borderRadius: '0.75rem',
-                      color: '#0A0A0A',
-                      fontSize: '12px',
-                    }}
-                    formatter={(val: any) => [formatFCFA(val), 'Chiffre']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="ca"
-                    stroke="#0A0A0A"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorCA)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {activeTrendData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-[#888888]">
+                  Aucune vente finalisée sur cette période.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={activeTrendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorCA" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0A0A0A" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#0A0A0A" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEEEEE" vertical={false} />
+                    <XAxis dataKey="label" stroke="#888888" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#FFFFFF',
+                        borderColor: '#0A0A0A',
+                        borderRadius: '0.75rem',
+                        color: '#0A0A0A',
+                        fontSize: '12px',
+                      }}
+                      formatter={(val: any) => [formatFCFA(val), 'Chiffre']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="ca"
+                      stroke="#0A0A0A"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorCA)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -268,31 +272,37 @@ export const AdminStatisticsPage: React.FC = () => {
                     PRODUITS LES PLUS VENDUS
                   </h3>
                   <p className="text-xs text-[#888888]">
-                    Top 5 des plats générateurs de revenus
+                    Classement des plats générateurs de revenus réels
                   </p>
                 </div>
                 <Award className="w-5 h-5 text-[#0A0A0A]" />
               </div>
 
               <div className="divide-y divide-[#EEEEEE]">
-                {topDishes.map(dish => (
-                  <div key={dish.rank} className="py-3.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center font-mono font-bold text-xs">
-                        {dish.rank}
-                      </span>
-                      <div>
-                        <span className="font-bold text-[#0A0A0A] block">{dish.name}</span>
-                        <span className="text-[11px] text-[#888888]">{dish.sales} portions vendues</span>
+                {topDishes.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-[#888888]">
+                    Aucune vente enregistrée pour cette période.
+                  </div>
+                ) : (
+                  topDishes.map((dish: any) => (
+                    <div key={dish.rank} className="py-3.5 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center font-mono font-bold text-xs">
+                          {dish.rank}
+                        </span>
+                        <div>
+                          <span className="font-bold text-[#0A0A0A] block">{dish.name}</span>
+                          <span className="text-[11px] text-[#888888]">{dish.sales} portions vendues</span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-bold text-[#0A0A0A] block">{formatFCFA(dish.ca)}</span>
+                        <span className="text-[11px] text-[#0A0A0A] font-semibold">{dish.evolution}</span>
                       </div>
                     </div>
-
-                    <div className="text-right">
-                      <span className="font-bold text-[#0A0A0A] block">{formatFCFA(dish.ca)}</span>
-                      <span className="text-[11px] text-[#0A0A0A] font-semibold">{dish.evolution}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -304,7 +314,7 @@ export const AdminStatisticsPage: React.FC = () => {
                     HEURES LES PLUS ACTIVES
                   </h3>
                   <p className="text-xs text-[#888888]">
-                    Affluence horaire constatée
+                    Affluence horaire constatée en direct
                   </p>
                 </div>
                 <Clock className="w-5 h-5 text-[#0A0A0A]" />
@@ -316,31 +326,39 @@ export const AdminStatisticsPage: React.FC = () => {
                   Heure de pointe maximale
                 </span>
                 <p className="font-sans font-black text-xl">
-                  20h00 — Service du dîner
+                  {bestPeak ? `${bestPeak.hour} — Pic d'affluence` : 'Aucun pic détecté'}
                 </p>
                 <p className="text-xs text-[#EAEAEA]">
-                  44 commandes concentrées sur ce créneau (31% de la journée).
+                  {bestPeak
+                    ? `${bestPeak.commandes} commandes enregistrées sur ce créneau.`
+                    : 'Les commandes servies détermineront automatiquement les heures de pointe.'}
                 </p>
               </div>
 
               {/* Bar visualization according to Section 43 */}
               <div className="space-y-2 pt-2 text-xs font-mono">
-                {peakHoursData.map(item => (
-                  <div
-                    key={item.hour}
-                    className={`flex items-center justify-between p-2 rounded-xl transition-all ${
-                      item.isPeak ? 'bg-[#FAFAFA] border border-[#0A0A0A] font-bold' : ''
-                    }`}
-                  >
-                    <span className="w-8 font-bold text-[#0A0A0A]">{item.hour}</span>
-                    <span className="text-xs tracking-tighter text-[#0A0A0A] flex-1 px-3">
-                      {item.bar}
-                    </span>
-                    <span className="text-[#666666] font-sans text-xs">
-                      {item.commandes} cmd
-                    </span>
+                {peakHoursData.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-[#888888] font-sans">
+                    Aucune affluence enregistrée sur cette période.
                   </div>
-                ))}
+                ) : (
+                  peakHoursData.map((item: any) => (
+                    <div
+                      key={item.hour}
+                      className={`flex items-center justify-between p-2 rounded-xl transition-all ${
+                        item.isPeak ? 'bg-[#FAFAFA] border border-[#0A0A0A] font-bold' : ''
+                      }`}
+                    >
+                      <span className="w-8 font-bold text-[#0A0A0A]">{item.hour}</span>
+                      <span className="text-xs tracking-tighter text-[#0A0A0A] flex-1 px-3">
+                        {item.bar}
+                      </span>
+                      <span className="text-[#666666] font-sans text-xs">
+                        {item.commandes} cmd
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

@@ -7,6 +7,7 @@ async function main() {
   console.log('🌱 Début du seed TERANGA FOOD (MariaDB)...');
 
   // 1. Nettoyage de l'existant
+  await prisma.sale.deleteMany();
   await prisma.orderItemOption.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.orderStatusHistory.deleteMany();
@@ -613,7 +614,10 @@ async function main() {
         deliveryFee: i % 5 === 0 ? 1500 : 0,
         total: i % 5 === 0 ? 9750 : 8250,
         status: status,
+        orderNumber: `#TF-${orderId}`,
+        servedAt: status === 'SERVED' ? date : null,
         createdAt: date,
+        sale: status === 'SERVED' ? { create: { amount: i % 5 === 0 ? 9750 : 8250, createdAt: date } } : undefined,
         items: {
           create: [
             {

@@ -374,6 +374,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Écoute des événements de mise à jour de statut
       socket.on('order:updated', handleOrderUpdated);
       socket.on('order_status_updated', handleOrderUpdated);
+      socket.on('sale:created', (salePayload: any) => {
+        // Déclencher un rechargement des commandes pour synchroniser l'état servi et la vente
+        if (salePayload?.orderId) {
+          setOrders(prev =>
+            prev.map(o => (o.id === salePayload.orderId ? { ...o, status: 'SERVED' } : o))
+          );
+        }
+      });
 
       socket.on('table_status_updated', (updatedTable: any) => {
         setTables(prev =>

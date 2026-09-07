@@ -157,6 +157,7 @@ model Customer {
 
 model Order {
   id              String               @id // ex: '1042'
+  orderNumber     String?              // ex: '#TF-1042'
   customerName    String
   customerPhone   String
   orderType       OrderType            @default(DINE_IN)
@@ -164,15 +165,33 @@ model Order {
   deliveryAddress String?              @db.Text
   notes           String?              @db.Text
   subtotal        Int
+  discount        Int                  @default(0)
   deliveryFee     Int                  @default(0)
   total           Int
   status          OrderStatus          @default(PENDING)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
+  acceptedAt      DateTime?
+  preparingAt     DateTime?
+  readyAt         DateTime?
+  servedAt        DateTime?
+  cancelledAt     DateTime?
   items           OrderItem[]
   statusHistory   OrderStatusHistory[]
+  sale            Sale?
 
   @@index([status])
+  @@index([createdAt])
+}
+
+model Sale {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  amount    Int
+  createdAt DateTime @default(now())
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   @@index([createdAt])
 }
 
