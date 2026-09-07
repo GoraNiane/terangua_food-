@@ -78,6 +78,7 @@ export const updateTableStatus = async (req: Request, res: Response): Promise<vo
 
     const io = (req.app as any).get('io');
     if (io) {
+      io.to('admin').emit('table_status_updated', table);
       io.to('kitchen').emit('table_status_updated', table);
     }
 

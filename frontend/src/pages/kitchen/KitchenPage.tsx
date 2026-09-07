@@ -102,7 +102,7 @@ export const KitchenPage: React.FC = () => {
         <div className="p-3.5 bg-neutral-50/60 border-b border-neutral-100 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="font-mono font-black text-base text-neutral-900">
-              #TF-{order.id}
+              {order.orderNumber || (String(order.id).startsWith('#TF-') ? order.id : `#TF-${order.id}`)}
             </span>
             {order.orderType === 'DINE_IN' ? (
               <span className="bg-neutral-900 text-white font-extrabold text-xs px-2.5 py-0.5 rounded-md">

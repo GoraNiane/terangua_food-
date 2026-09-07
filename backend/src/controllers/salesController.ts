@@ -27,6 +27,8 @@ export const getSales = async (req: Request, res: Response): Promise<void> => {
       sales: result.sales,
       topProducts: result.topProducts,
       totalCount: result.totalCount,
+      charts: result.charts,
+      groupedBlocks: result.groupedBlocks,
     });
   } catch (err: any) {
     console.error('Erreur getSales :', err);

@@ -27,6 +27,7 @@ export const createOrderSchema = z
     deliveryAddress: z.string().max(255).optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
     subtotal: z.number().optional(),
+    discount: z.number().optional(),
     deliveryFee: z.number().optional(),
     total: z.number().optional(),
     items: z.array(orderItemSchema).min(1, 'La commande doit contenir au moins un article'),

@@ -21,6 +21,7 @@ export interface CreateOrderPayload {
   tableNumber?: string | null;
   deliveryAddress?: string | null;
   notes?: string | null;
+  discount?: number;
   items: CreateOrderItemInput[];
 }
 
@@ -30,6 +31,7 @@ export interface CreateOrderPayload {
  */
 export const createOrder = async (payload: CreateOrderPayload) => {
   const { customerName, customerPhone, tableNumber, deliveryAddress, notes, items } = payload;
+  const cleanPhone = customerPhone ? customerPhone.replace(/\s+/g, '') : '';
   const orderType = payload.orderType || 'DINE_IN';
 
   const formattedTableNumber =
@@ -120,7 +122,7 @@ export const createOrder = async (payload: CreateOrderPayload) => {
     const itemTotalPrice = effectiveUnitPrice * item.quantity;
     calculatedSubtotal += itemTotalPrice;
 
-    return {
+    const calculatedItem: any = {
       productId: product.id,
       name: product.name, // Snapshot immuable
       quantity: item.quantity,
@@ -129,19 +131,25 @@ export const createOrder = async (payload: CreateOrderPayload) => {
       selectedOptionsText:
         optionsTextList.length > 0 ? optionsTextList.join(', ') : item.selectedOptionsText || null,
       notes: item.notes ? item.notes.trim() : null,
-      options: optionsToCreate.length > 0 ? { create: optionsToCreate } : undefined,
     };
+
+    if (optionsToCreate.length > 0) {
+      calculatedItem.options = { create: optionsToCreate };
+    }
+
+    return calculatedItem;
   });
 
   const deliveryFee = orderType === 'DELIVERY' ? 1500 : 0;
-  const calculatedTotal = calculatedSubtotal + deliveryFee;
+  const discount = Math.max(0, Number(payload.discount || 0));
+  const calculatedTotal = Math.max(0, calculatedSubtotal + deliveryFee - discount);
 
   // 3. Exécution atomique dans une transaction Prisma
   return await prisma.$transaction(async tx => {
     const recentOrders = await tx.order.findMany({
       select: { id: true },
       orderBy: { createdAt: 'desc' },
-      take: 25,
+      take: 100,
     });
     let maxNum = 1042;
     for (const o of recentOrders) {
@@ -150,7 +158,11 @@ export const createOrder = async (payload: CreateOrderPayload) => {
         maxNum = parsed;
       }
     }
-    const orderId = String(maxNum + 1);
+    let candidateNum = maxNum + 1;
+    while (await tx.order.findUnique({ where: { id: String(candidateNum) } })) {
+      candidateNum++;
+    }
+    const orderId = String(candidateNum);
     const orderNumber = `#TF-${orderId}`;
 
     const created = await tx.order.create({
@@ -158,13 +170,13 @@ export const createOrder = async (payload: CreateOrderPayload) => {
         id: orderId,
         orderNumber,
         customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
+        customerPhone: cleanPhone || customerPhone.trim(),
         orderType,
         tableNumber: formattedTableNumber,
         deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress?.trim() || null : null,
         notes: notes ? notes.trim() : null,
         subtotal: calculatedSubtotal,
-        discount: 0,
+        discount,
         deliveryFee,
         total: calculatedTotal,
         status: 'PENDING',
@@ -201,7 +213,6 @@ export const createOrder = async (payload: CreateOrderPayload) => {
     }
 
     // CRM & Fidélité avec numéro nettoyé (sans espaces)
-    const cleanPhone = customerPhone.replace(/\s+/g, '').trim();
     await tx.customer.upsert({
       where: { phone: cleanPhone },
       update: {

@@ -33,21 +33,29 @@ export const ClientOrderTrackingPage: React.FC = () => {
   const [fetchedOrder, setFetchedOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const cleanId = (orderId || '').replace(/^[#\s]*TF-/i, '').trim();
+
   // Find order from store or fetched from API
-  const order = orders.find(o => o.id === orderId) || fetchedOrder;
+  const order =
+    orders.find(
+      o =>
+        o.id === orderId ||
+        o.orderNumber === orderId ||
+        (cleanId !== '' && (o.id === cleanId || o.orderNumber === `#TF-${cleanId}`))
+    ) || fetchedOrder;
 
   // Récupération depuis la BDD si non présent en mémoire
   useEffect(() => {
-    if (!orders.find(o => o.id === orderId) && orderId) {
+    if (!order && orderId) {
       setIsLoading(true);
-      fetch(`${API_BASE_URL}/api/orders/${orderId}`)
+      fetch(`${API_BASE_URL}/api/orders/${cleanId || orderId}`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => {
           if (d?.order) setFetchedOrder(d.order);
         })
         .finally(() => setIsLoading(false));
     }
-  }, [orderId, orders]);
+  }, [orderId, cleanId, order]);
 
   // Écoute temps réel Socket.IO pour suivi de commande sans rafraîchissement
   useEffect(() => {
@@ -58,9 +66,16 @@ export const ClientOrderTrackingPage: React.FC = () => {
         timeout: 3000,
       });
       socket.emit('join_order', orderId);
+      if (cleanId && cleanId !== orderId) {
+        socket.emit('join_order', cleanId);
+      }
 
       const handleUpdate = (updated: Order) => {
-        if (updated.id === orderId) {
+        if (
+          updated.id === orderId ||
+          updated.orderNumber === orderId ||
+          (cleanId !== '' && (updated.id === cleanId || updated.orderNumber === `#TF-${cleanId}`))
+        ) {
           setFetchedOrder(updated);
         }
       };
@@ -72,7 +87,7 @@ export const ClientOrderTrackingPage: React.FC = () => {
         socket.disconnect();
       };
     } catch {}
-  }, [orderId]);
+  }, [orderId, cleanId]);
 
   useEffect(() => {
     if (order && (order.status === 'READY' || order.status === 'SERVED')) {

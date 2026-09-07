@@ -1,17 +1,49 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Printer, Share2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatFCFA } from '../../services/whatsappService';
 import { useLanguage, getRestaurantSlogan, getProductName, getOptionItemName } from '../../services/i18n';
+import { API_BASE_URL } from '../../config/api';
+import { Order } from '../../types';
 
 export const ClientReceiptPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const { orders, restaurant } = useRestaurantStore();
   const { t, lang } = useLanguage();
+  const [fetchedOrder, setFetchedOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const order = orders.find(o => o.id === orderId) || orders[0];
+  const cleanId = (orderId || '').replace(/^[#\s]*TF-/i, '').trim();
+  const order =
+    orders.find(
+      o =>
+        o.id === orderId ||
+        o.orderNumber === orderId ||
+        (cleanId !== '' && (o.id === cleanId || o.orderNumber === `#TF-${cleanId}`))
+    ) || fetchedOrder || (orderId ? null : orders[0]);
+
+  useEffect(() => {
+    if (!order && orderId) {
+      setIsLoading(true);
+      fetch(`${API_BASE_URL}/api/orders/${cleanId || orderId}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d?.order) setFetchedOrder(d.order);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [orderId, cleanId, order]);
+
+  if (isLoading && !order) {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] text-[#0A0A0A] flex flex-col items-center justify-center p-4 gap-3">
+        <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-[#8A8A8A] font-semibold">Chargement de votre reçu...</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -29,7 +61,7 @@ export const ClientReceiptPage: React.FC = () => {
 
   const handleShareWhatsApp = () => {
     const rawText = t.receiptShareText
-      .replace('#{id}', `#${order.id}`)
+      .replace('#{id}', order.orderNumber || `#${order.id}`)
       .replace('{name}', restaurant.name)
       .replace('{total}', formatFCFA(order.total))
       .replace('{url}', receiptUrl);

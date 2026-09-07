@@ -15,19 +15,26 @@ export const ClientOrderSuccessPage: React.FC = () => {
   const [fetchedOrder, setFetchedOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const order = orders.find(o => o.id === orderId) || fetchedOrder;
+  const cleanId = (orderId || '').replace(/^[#\s]*TF-/i, '').trim();
+  const order =
+    orders.find(
+      o =>
+        o.id === orderId ||
+        o.orderNumber === orderId ||
+        (cleanId !== '' && (o.id === cleanId || o.orderNumber === `#TF-${cleanId}`))
+    ) || fetchedOrder;
 
   useEffect(() => {
-    if (!orders.find(o => o.id === orderId) && orderId) {
+    if (!order && orderId) {
       setIsLoading(true);
-      fetch(`${API_BASE_URL}/api/orders/${orderId}`)
+      fetch(`${API_BASE_URL}/api/orders/${cleanId || orderId}`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => {
           if (d?.order) setFetchedOrder(d.order);
         })
         .finally(() => setIsLoading(false));
     }
-  }, [orderId, orders]);
+  }, [orderId, cleanId, order]);
 
   useEffect(() => {
     try {

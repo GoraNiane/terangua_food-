@@ -59,7 +59,9 @@ export const AdminOrdersPage: React.FC = () => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return matchesStatus;
 
-    const matchesId = order.id.toLowerCase().includes(query);
+    const matchesId =
+      order.id.toLowerCase().includes(query) ||
+      (order.orderNumber?.toLowerCase().includes(query) ?? false);
     const matchesName = order.customerName.toLowerCase().includes(query);
     const matchesPhone = order.customerPhone.includes(query);
     const matchesTable = order.tableNumber?.includes(query);

@@ -77,6 +77,7 @@ interface RestaurantContextType extends StoreState {
     notes?: string;
     items: Order['items'];
     subtotal: number;
+    discount?: number;
     deliveryFee: number;
     total: number;
   }) => Promise<Order>;
@@ -677,6 +678,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     notes?: string;
     items: Order['items'];
     subtotal: number;
+    discount?: number;
     deliveryFee: number;
     total: number;
   }): Promise<Order> => {
@@ -688,6 +690,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const payload = {
       ...orderData,
       tableNumber: formattedTable,
+      discount: orderData.discount || 0,
     };
 
     let createdOrder: Order | null = null;
@@ -729,6 +732,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         notes: orderData.notes?.trim(),
         items: orderData.items,
         subtotal: orderData.subtotal,
+        discount: orderData.discount || 0,
         deliveryFee: orderData.deliveryFee,
         total: orderData.total,
         status: 'PENDING',
@@ -811,6 +815,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus, note?: string): Promise<void> => {
+    const cleanId = String(orderId).replace(/^[#\s]*TF-/i, '').trim();
+    const isTarget = (o: Order) =>
+      o.id === orderId ||
+      o.orderNumber === orderId ||
+      (cleanId !== '' && (o.id === cleanId || o.orderNumber === `#TF-${cleanId}`));
+
     // 1. Envoyer au backend
     const token = getAuthToken();
     try {
@@ -826,7 +836,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (res.ok) {
         const data = await res.json();
         if (data.order) {
-          setOrders(prev => prev.map(o => (o.id === orderId ? data.order : o)));
+          setOrders(prev => prev.map(o => (isTarget(o) ? data.order : o)));
           if (data.order.tableNumber && (status === 'SERVED' || status === 'CANCELLED')) {
             const tNum = String(data.order.tableNumber).trim().padStart(2, '0');
             setTables(prev =>
@@ -843,7 +853,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // 2. Mettre à jour l'état local en cas de problème de réseau
     setOrders(prev =>
       prev.map(o => {
-        if (o.id === orderId) {
+        if (isTarget(o)) {
           const history = o.statusHistory || [];
           return {
             ...o,
@@ -859,7 +869,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
 
     // 3. Libérer la table si la commande est servie ou annulée
-    const targetOrder = orders.find(o => o.id === orderId);
+    const targetOrder = orders.find(isTarget);
     if (targetOrder && targetOrder.tableNumber && (status === 'SERVED' || status === 'CANCELLED')) {
       const tNum = String(targetOrder.tableNumber).trim().padStart(2, '0');
       setTables(prev =>

@@ -295,6 +295,61 @@ export const getFinalizedSales = async (options: SalesQueryOptions = {}) => {
     };
   });
 
+  // Construction des graphiques pour la page des ventes
+  const hourlyChart = Array.from(hourlySalesMap.entries()).map(([hour, data]) => ({
+    label: `${hour}h`,
+    time: `${hour}h`,
+    revenue: data.revenue,
+    orders: data.orders,
+  }));
+
+  const daysOfWeek = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const dailySalesMap = new Map<string, { revenue: number; orders: number }>();
+  daysOfWeek.forEach(d => dailySalesMap.set(d, { revenue: 0, orders: 0 }));
+
+  sales.forEach(s => {
+    const dayName = daysOfWeek[new Date(s.createdAt).getDay()];
+    const entry = dailySalesMap.get(dayName) || { revenue: 0, orders: 0 };
+    entry.revenue += s.amount;
+    entry.orders += 1;
+    dailySalesMap.set(dayName, entry);
+  });
+
+  const dailyChart = Array.from(dailySalesMap.entries()).map(([day, data]) => ({
+    label: day,
+    time: day,
+    revenue: data.revenue,
+    orders: data.orders,
+  }));
+
+  // Regroupements chronologiques par service
+  let midiOrders = 0;
+  let midiRevenue = 0;
+  let apremOrders = 0;
+  let apremRevenue = 0;
+  let soirOrders = 0;
+  let soirRevenue = 0;
+
+  sales.forEach(s => {
+    const h = new Date(s.createdAt).getHours();
+    if (h >= 11 && h < 15) {
+      midiOrders++;
+      midiRevenue += s.amount;
+    } else if (h >= 15 && h < 19) {
+      apremOrders++;
+      apremRevenue += s.amount;
+    } else {
+      soirOrders++;
+      soirRevenue += s.amount;
+    }
+  });
+
+  const groupedBlocks = [
+    { label: 'Service Midi (11h - 15h)', ordersCount: midiOrders, revenue: midiRevenue },
+    { label: 'Après-midi (15h - 19h)', ordersCount: apremOrders, revenue: apremRevenue },
+    { label: 'Service Soirée (19h - 23h+)', ordersCount: soirOrders, revenue: soirRevenue },
+  ];
+
   return {
     kpis: {
       totalRevenue,
@@ -309,5 +364,11 @@ export const getFinalizedSales = async (options: SalesQueryOptions = {}) => {
     sales: formattedSalesList,
     topProducts,
     totalCount: sales.length,
+    charts: {
+      hourly: hourlyChart,
+      daily: dailyChart,
+      evolution: hourlyChart,
+    },
+    groupedBlocks,
   };
 };
