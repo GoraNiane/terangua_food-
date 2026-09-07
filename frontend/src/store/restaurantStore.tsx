@@ -79,8 +79,8 @@ interface RestaurantContextType extends StoreState {
     subtotal: number;
     deliveryFee: number;
     total: number;
-  }) => Order;
-  updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => void;
+  }) => Promise<Order>;
+  updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => Promise<void>;
   updateTableStatus: (tableNumber: string, status: TableStatus) => void;
   addTable: (tableData: { number: string; capacity: number; area?: string; status?: TableStatus }) => Promise<void>;
   deleteTable: (tableIdOrNumber: string) => Promise<void>;
@@ -163,7 +163,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [restaurant, setRestaurant] = useState<Restaurant>(initial.restaurant || INITIAL_RESTAURANT);
   const [categories, setCategories] = useState<Category[]>(initial.categories || INITIAL_CATEGORIES);
   const [products, setProducts] = useState<Product[]>(initial.products || INITIAL_PRODUCTS);
-  const [orders, setOrders] = useState<Order[]>(initial.orders || INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    if (initial.orders && Array.isArray(initial.orders) && initial.orders.length > 0) {
+      return initial.orders;
+    }
+    return [];
+  });
   const [customers, setCustomers] = useState<Customer[]>(initial.customers || INITIAL_CUSTOMERS);
   const [tables, setTables] = useState<RestaurantTable[]>(initial.tables || INITIAL_TABLES);
   const [promotions, setPromotions] = useState<Promotion[]>(initial.promotions || INITIAL_PROMOTIONS);
@@ -248,10 +253,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         }
 
-        // Si l'utilisateur est un membre d'équipe authentifié, synchroniser les commandes & tables
+        // Si l'utilisateur est un membre d'équipe authentifié, synchroniser les commandes & tables réelles
         if (token) {
+          let ordersUrl = `${BACKEND_URL}/api/orders`;
+          try {
+            const userStr = localStorage.getItem('teranga_auth_user') || sessionStorage.getItem('teranga_auth_user');
+            if (userStr) {
+              const u = JSON.parse(userStr);
+              if (u.role === 'KITCHEN') {
+                ordersUrl = `${BACKEND_URL}/api/orders/kitchen`;
+              }
+            }
+          } catch {}
+
           const [ordersRes, tablesRes] = await Promise.all([
-            fetch(`${BACKEND_URL}/api/orders`, {
+            fetch(ordersUrl, {
               headers: { Authorization: `Bearer ${token}` },
             }).catch(() => null),
             fetch(`${BACKEND_URL}/api/tables`).catch(() => null),
@@ -259,7 +275,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           if (ordersRes && ordersRes.ok) {
             const ordersData = await ordersRes.json();
-            if (ordersData.orders && ordersData.orders.length > 0) {
+            if (Array.isArray(ordersData.orders)) {
               setOrders(ordersData.orders);
             }
           }
@@ -299,8 +315,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const token = getAuthToken();
       socket = socketIOClient(BACKEND_URL, {
         auth: { token },
-        reconnectionAttempts: 2,
-        timeout: 2500,
+        reconnectionAttempts: 5,
+        timeout: 3000,
         transports: ['websocket', 'polling'],
       });
 
@@ -310,7 +326,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         socket?.emit('join_admin', { token });
       });
 
-      socket.on('new_order', (newOrder: Order) => {
+      const handleNewOrder = (newOrder: Order) => {
         setOrders(prev => {
           if (prev.some(o => o.id === newOrder.id)) return prev;
           return [newOrder, ...prev];
@@ -338,11 +354,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           amount: newOrder.total,
         });
         if (isSoundEnabled) playOrderChime();
-      });
+      };
 
-      socket.on('order_status_updated', (updated: Order) => {
+      const handleOrderUpdated = (updated: Order) => {
         setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
-      });
+        if (updated.tableNumber && (updated.status === 'SERVED' || updated.status === 'CANCELLED')) {
+          const tNum = String(updated.tableNumber).trim().padStart(2, '0');
+          setTables(prev =>
+            prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
+          );
+        }
+      };
+
+      // Écoute des événements de création de commande
+      socket.on('order:created', handleNewOrder);
+      socket.on('new_order', handleNewOrder);
+      socket.on('kitchen_new_order', handleNewOrder);
+
+      // Écoute des événements de mise à jour de statut
+      socket.on('order:updated', handleOrderUpdated);
+      socket.on('order_status_updated', handleOrderUpdated);
 
       socket.on('table_status_updated', (updatedTable: any) => {
         setTables(prev =>
@@ -500,7 +531,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setCart([]);
   };
 
-  const createOrder = (orderData: {
+  const createOrder = async (orderData: {
     customerName: string;
     customerPhone: string;
     orderType: Order['orderType'];
@@ -511,83 +542,61 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     subtotal: number;
     deliveryFee: number;
     total: number;
-  }): Order => {
-    const highestId = orders.reduce((max, o) => {
-      const num = parseInt(o.id.replace(/\D/g, ''), 10);
-      return isNaN(num) ? max : Math.max(max, num);
-    }, 1042);
-    const newId = String(highestId + 1);
-
+  }): Promise<Order> => {
     const formattedTable =
       orderData.orderType === 'DINE_IN' && orderData.tableNumber
         ? String(orderData.tableNumber).trim().padStart(2, '0')
         : undefined;
-
-    const newOrder: Order = {
-      id: newId,
-      customerName: orderData.customerName,
-      customerPhone: orderData.customerPhone,
-      orderType: orderData.orderType,
-      tableNumber: formattedTable,
-      deliveryAddress: orderData.deliveryAddress,
-      notes: orderData.notes,
-      items: orderData.items,
-      subtotal: orderData.subtotal,
-      deliveryFee: orderData.deliveryFee,
-      total: orderData.total,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      statusHistory: [
-        {
-          status: 'PENDING',
-          changedAt: new Date().toISOString(),
-          note: formattedTable ? `Commande transmise depuis la table ${formattedTable}` : 'Nouvelle commande',
-        },
-      ],
-    };
 
     const payload = {
       ...orderData,
       tableNumber: formattedTable,
     };
 
-    // 1. Envoyer au backend MariaDB
-    fetch(`${BACKEND_URL}/api/orders`, {
+    // 1. Envoi au backend et attente de la validation BDD
+    const res = await fetch(`${BACKEND_URL}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    })
-      .then(async res => {
-        if (res.ok) {
-          const data = await res.json();
-          if (data.order) {
-            // Remplacer la commande optimiste par la commande officielle du serveur (avec son ID définitif)
-            setOrders(prev => prev.map(o => (o.id === newOrder.id ? data.order : o)));
-          }
-        }
-      })
-      .catch(e => console.warn('Sync local fallback order', e));
+    });
 
-    // 2. Mettre à jour l'état local immédiat
-    setOrders(prev => [newOrder, ...prev]);
+    if (!res.ok) {
+      let errMsg = "Impossible d'enregistrer la commande en base de données.";
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+      } catch {
+        // En cas de réponse non-JSON
+      }
+      throw new Error(errMsg);
+    }
 
-    // 3. Mettre à jour la table
+    const data = await res.json();
+    const createdOrder: Order = data.order;
+    if (!createdOrder) {
+      throw new Error("Réponse serveur invalide lors de la création de la commande.");
+    }
+
+    // 2. Mettre à jour l'état local avec la vraie commande retournée par la BDD
+    setOrders(prev => [createdOrder, ...prev.filter(o => o.id !== createdOrder.id)]);
+
+    // 3. Mettre à jour la table si sur place
     if (formattedTable) {
       setTables(prev =>
         prev.map(t =>
           t.number === formattedTable
             ? {
-              ...t,
-              status: 'OCCUPIED',
-              currentOrderId: newOrder.id,
-              totalSpentToday: (t.totalSpentToday || 0) + orderData.total,
-            }
+                ...t,
+                status: 'OCCUPIED',
+                currentOrderId: createdOrder.id,
+                totalSpentToday: (t.totalSpentToday || 0) + createdOrder.total,
+              }
             : t
         )
       );
     }
 
-    // 4. Mettre à jour le CRM client
+    // 4. Mettre à jour le CRM
     setCustomers(prev => {
       const existing = prev.find(
         c => c.phone.replace(/\s+/g, '') === orderData.customerPhone.replace(/\s+/g, '')
@@ -596,12 +605,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return prev.map(c =>
           c.id === existing.id
             ? {
-              ...c,
-              ordersCount: c.ordersCount + 1,
-              totalSpent: c.totalSpent + orderData.total,
-              lastOrderDate: 'À l’instant',
-              loyaltyPoints: (c.loyaltyPoints || 0) + 10,
-            }
+                ...c,
+                ordersCount: c.ordersCount + 1,
+                totalSpent: c.totalSpent + createdOrder.total,
+                lastOrderDate: 'À l’instant',
+                loyaltyPoints: (c.loyaltyPoints || 0) + 10,
+              }
             : c
         );
       } else {
@@ -610,7 +619,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           name: orderData.customerName,
           phone: orderData.customerPhone,
           ordersCount: 1,
-          totalSpent: orderData.total,
+          totalSpent: createdOrder.total,
           lastOrderDate: 'À l’instant',
           isVip: false,
           loyaltyPoints: 10,
@@ -622,29 +631,47 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (isSoundEnabled) playOrderChime();
 
     setNotification({
-      id: newOrder.id,
-      title: `🔔 Nouvelle commande #${newOrder.id}`,
-      subtitle: `${newOrder.customerName} • ${formattedTable ? `Table ${formattedTable}` : 'À emporter'}`,
-      amount: newOrder.total,
+      id: createdOrder.id,
+      title: `🔔 Nouvelle commande #${createdOrder.id}`,
+      subtitle: `${createdOrder.customerName} • ${formattedTable ? `Table ${formattedTable}` : 'À emporter'}`,
+      amount: createdOrder.total,
     });
 
     clearCart();
-    return newOrder;
+    return createdOrder;
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus, note?: string) => {
-    // 1. Envoyer au backend MariaDB
+  const updateOrderStatus = async (orderId: string, status: OrderStatus, note?: string): Promise<void> => {
+    // 1. Envoyer au backend
     const token = getAuthToken();
-    fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ status, note }),
-    }).catch(e => console.warn('Sync status fallback', e));
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ status, note }),
+      });
 
-    // 2. Mettre à jour l'état local
+      if (res.ok) {
+        const data = await res.json();
+        if (data.order) {
+          setOrders(prev => prev.map(o => (o.id === orderId ? data.order : o)));
+          if (data.order.tableNumber && (status === 'SERVED' || status === 'CANCELLED')) {
+            const tNum = String(data.order.tableNumber).trim().padStart(2, '0');
+            setTables(prev =>
+              prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
+            );
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Sync status fallback', e);
+    }
+
+    // 2. Mettre à jour l'état local en cas de problème de réseau
     setOrders(prev =>
       prev.map(o => {
         if (o.id === orderId) {

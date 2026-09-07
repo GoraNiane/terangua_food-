@@ -91,21 +91,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       // Calcul des suppléments d'options depuis la base
       let extraPriceTotal = 0;
       const optionsTextList: string[] = [];
+      const optionsToCreate: Array<{ optionName: string; valueName: string; extraPrice: number }> = [];
 
       if (item.selectedOptions && item.selectedOptions.length > 0) {
         for (const selOpt of item.selectedOptions) {
           const dbOpt = product.options.find(
             o => o.name.toLowerCase() === selOpt.optionName.trim().toLowerCase()
           );
+          let extra = 0;
+          let valName = selOpt.valueName;
           if (dbOpt) {
             const dbVal = dbOpt.values.find(
               v => v.name.toLowerCase() === selOpt.valueName.trim().toLowerCase()
             );
             if (dbVal) {
-              extraPriceTotal += dbVal.extraPrice;
-              optionsTextList.push(dbVal.name);
+              extra = dbVal.extraPrice;
+              valName = dbVal.name;
             }
           }
+          extraPriceTotal += extra;
+          optionsTextList.push(valName);
+          optionsToCreate.push({
+            optionName: selOpt.optionName,
+            valueName: valName,
+            extraPrice: extra,
+          });
         }
       }
 
@@ -124,6 +134,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
             ? optionsTextList.join(', ')
             : item.selectedOptionsText || null,
         notes: item.notes ? item.notes.trim() : null,
+        options: optionsToCreate.length > 0 ? { create: optionsToCreate } : undefined,
       };
     });
 
@@ -139,7 +150,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
       let maxNum = 1042;
       for (const o of existingOrders) {
-        const parsed = parseInt(o.id, 10);
+        const parsed = parseInt(o.id.replace(/\D/g, ''), 10);
         if (!isNaN(parsed) && parsed > maxNum) {
           maxNum = parsed;
         }
@@ -176,7 +187,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           },
         },
         include: {
-          items: true,
+          items: {
+            include: { options: true },
+          },
           statusHistory: true,
         },
       });
@@ -219,8 +232,11 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // 5. Notification ciblée temps réel via Socket.IO (Admin, Cuisine & Staff)
     const io = (req.app as any).get('io');
     if (io) {
+      io.emit('order:created', order);
       io.emit('new_order', order);
+      io.to('kitchen').emit('order:created', order);
       io.to('kitchen').emit('kitchen_new_order', order);
+      io.to('admin').emit('order:created', order);
       if (formattedTableNumber) {
         io.emit('table_status_updated', {
           number: formattedTableNumber,
@@ -255,7 +271,9 @@ export const getOrders = async (req: Request, res: Response): Promise<void> => {
           : undefined,
       },
       include: {
-        items: true,
+        items: {
+          include: { options: true },
+        },
         statusHistory: {
           orderBy: { changedAt: 'asc' },
         },
@@ -276,7 +294,9 @@ export const getOrderById = async (req: Request, res: Response): Promise<void> =
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
-        items: true,
+        items: {
+          include: { options: true },
+        },
         statusHistory: {
           orderBy: { changedAt: 'asc' },
         },
@@ -356,7 +376,8 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { status, note } = validation.data;
+    const { status: rawStatus, note } = validation.data;
+    const status = rawStatus === 'ACCEPTED' ? 'CONFIRMED' : rawStatus;
 
     const updatedOrder = await prisma.$transaction(async tx => {
       // Vérifier si la commande existe déjà
@@ -389,7 +410,9 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
           },
         },
         include: {
-          items: true,
+          items: {
+            include: { options: true },
+          },
           statusHistory: {
             orderBy: { changedAt: 'asc' },
           },
@@ -411,7 +434,11 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
     const io = (req.app as any).get('io');
     if (io) {
       // 1. Mise à jour générale de statut pour l'écran cuisine, l'admin et le suivi client
+      io.emit('order:updated', updatedOrder);
       io.emit('order_status_updated', updatedOrder);
+      io.to('kitchen').emit('order:updated', updatedOrder);
+      io.to('admin').emit('order:updated', updatedOrder);
+      io.to(`order_${id}`).emit('order:updated', updatedOrder);
       io.to(`order_${id}`).emit('order_status_updated', updatedOrder);
 
       // 2. Si la commande est prête, notifier immédiatement le client

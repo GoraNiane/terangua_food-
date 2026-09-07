@@ -16,8 +16,10 @@ import {
 import confetti from 'canvas-confetti';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatFCFA, generateWhatsAppUrl } from '../../services/whatsappService';
-import { OrderStatus } from '../../types';
+import { Order, OrderStatus } from '../../types';
 import { useLanguage, getProductName, getOptionItemName } from '../../services/i18n';
+import { API_BASE_URL, WS_URL } from '../../config/api';
+import { io as socketIOClient } from 'socket.io-client';
 
 export const ClientOrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -28,9 +30,49 @@ export const ClientOrderTrackingPage: React.FC = () => {
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [reviewComment, setReviewComment] = useState<string>('');
   const [reviewSubmitted, setReviewSubmitted] = useState<boolean>(false);
+  const [fetchedOrder, setFetchedOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Find order from store
-  const order = orders.find(o => o.id === orderId) || orders[0];
+  // Find order from store or fetched from API
+  const order = orders.find(o => o.id === orderId) || fetchedOrder;
+
+  // Récupération depuis la BDD si non présent en mémoire
+  useEffect(() => {
+    if (!orders.find(o => o.id === orderId) && orderId) {
+      setIsLoading(true);
+      fetch(`${API_BASE_URL}/api/orders/${orderId}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d?.order) setFetchedOrder(d.order);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [orderId, orders]);
+
+  // Écoute temps réel Socket.IO pour suivi de commande sans rafraîchissement
+  useEffect(() => {
+    if (!orderId) return;
+    try {
+      const socket = socketIOClient(WS_URL, {
+        transports: ['websocket', 'polling'],
+        timeout: 3000,
+      });
+      socket.emit('join_order', orderId);
+
+      const handleUpdate = (updated: Order) => {
+        if (updated.id === orderId) {
+          setFetchedOrder(updated);
+        }
+      };
+
+      socket.on('order:updated', handleUpdate);
+      socket.on('order_status_updated', handleUpdate);
+
+      return () => {
+        socket.disconnect();
+      };
+    } catch {}
+  }, [orderId]);
 
   useEffect(() => {
     if (order && (order.status === 'READY' || order.status === 'SERVED')) {

@@ -1,17 +1,33 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Check, ArrowRight, Utensils, MapPin, Send } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatFCFA, generateWhatsAppUrl } from '../../services/whatsappService';
 import { useLanguage } from '../../services/i18n';
+import { API_BASE_URL } from '../../config/api';
+import { Order } from '../../types';
 
 export const ClientOrderSuccessPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const { orders, restaurant } = useRestaurantStore();
   const { t } = useLanguage();
+  const [fetchedOrder, setFetchedOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const order = orders.find(o => o.id === orderId) || orders[0];
+  const order = orders.find(o => o.id === orderId) || fetchedOrder;
+
+  useEffect(() => {
+    if (!orders.find(o => o.id === orderId) && orderId) {
+      setIsLoading(true);
+      fetch(`${API_BASE_URL}/api/orders/${orderId}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d?.order) setFetchedOrder(d.order);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [orderId, orders]);
 
   useEffect(() => {
     try {
@@ -26,10 +42,20 @@ export const ClientOrderSuccessPage: React.FC = () => {
     }
   }, []);
 
+  if (isLoading && !order) {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] text-[#0A0A0A] flex flex-col items-center justify-center p-4 gap-3">
+        <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-[#8A8A8A] font-semibold">Récupération de votre commande...</p>
+      </div>
+    );
+  }
+
   if (!order) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] text-[#0A0A0A] flex items-center justify-center p-4">
-        <p className="text-sm">{t.orderNotFoundTitle}</p>
+      <div className="min-h-screen bg-[#FAFAFA] text-[#0A0A0A] flex flex-col items-center justify-center p-4 gap-3">
+        <p className="text-sm font-semibold">{t.orderNotFoundTitle}</p>
+        <Link to="/menu" className="text-xs underline text-amber-600 font-bold">Retour au menu</Link>
       </div>
     );
   }

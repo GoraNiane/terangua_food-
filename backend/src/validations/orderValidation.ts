@@ -26,6 +26,9 @@ export const createOrderSchema = z
     tableNumber: z.string().optional().nullable(),
     deliveryAddress: z.string().max(255).optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
+    subtotal: z.number().optional(),
+    deliveryFee: z.number().optional(),
+    total: z.number().optional(),
     items: z.array(orderItemSchema).min(1, 'La commande doit contenir au moins un article'),
   })
   .refine(
@@ -54,6 +57,6 @@ export const createOrderSchema = z
   );
 
 export const updateOrderStatusSchema = z.object({
-  status: z.enum(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'CANCELLED']),
+  status: z.enum(['PENDING', 'CONFIRMED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'CANCELLED']),
   note: z.string().max(300).optional().nullable(),
 });

@@ -19,6 +19,7 @@ export const ClientCheckoutPage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Delivery fee
   const deliveryFee = orderType === 'DELIVERY' ? 1500 : 0;
@@ -71,11 +72,12 @@ export const ClientCheckoutPage: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
 
     const orderItems = cart.map(item => ({
       productId: item.productId,
@@ -83,7 +85,13 @@ export const ClientCheckoutPage: React.FC = () => {
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       totalPrice: item.unitPrice * item.quantity,
+      selectedOptions: (item.selectedOptions || []).map(o => ({
+        optionName: o.groupName || 'Option',
+        valueName: o.optionName,
+        extraPrice: o.extraPrice || 0,
+      })),
       selectedOptionsText: item.selectedOptions.map(o => o.optionName).join(', ') || undefined,
+      notes: item.notes || undefined,
     }));
 
     const normalizedTable =
@@ -91,32 +99,40 @@ export const ClientCheckoutPage: React.FC = () => {
         ? String(tableNumber.trim()).padStart(2, '0')
         : undefined;
 
-    // 1. Create order in central store
-    const createdOrder = createOrder({
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      orderType,
-      tableNumber: normalizedTable,
-      deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
-      notes: notes.trim() || undefined,
-      items: orderItems,
-      subtotal: cartTotal,
-      deliveryFee,
-      total: grandTotal,
-    });
-
-    // 2. Build WhatsApp URL
-    const whatsappUrl = generateWhatsAppUrl(createdOrder, restaurant);
-
-    // 3. Ouvrir WhatsApp si disponible
     try {
-      window.open(whatsappUrl, '_blank');
-    } catch {
-      // Ignorer si popup bloqué
-    }
+      // 1. Enregistrement transactionnel en BDD
+      const createdOrder = await createOrder({
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        orderType,
+        tableNumber: normalizedTable,
+        deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
+        notes: notes.trim() || undefined,
+        items: orderItems,
+        subtotal: cartTotal,
+        deliveryFee,
+        total: grandTotal,
+      });
 
-    // 4. Navigate to confirmation screen
-    navigate(`/order-confirmation/${createdOrder.id}`);
+      // 2. Génération du message WhatsApp officiel avec l'ID réel
+      const whatsappUrl = generateWhatsAppUrl(createdOrder, restaurant);
+
+      // 3. Ouvrir WhatsApp si disponible
+      try {
+        window.open(whatsappUrl, '_blank');
+      } catch {
+        // popup bloqué
+      }
+
+      // 4. Redirection vers la confirmation
+      navigate(`/order-confirmation/${createdOrder.id}`);
+    } catch (err: any) {
+      console.error('Erreur confirmation commande :', err);
+      setSubmitError(
+        err.message || "Impossible d'enregistrer votre commande. Veuillez vérifier votre connexion et réessayer."
+      );
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -381,15 +397,32 @@ export const ClientCheckoutPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Erreur de validation ou d'enregistrement BDD */}
+          {submitError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2 animate-shake">
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           {/* WhatsApp Submit Action */}
           <div className="space-y-2.5">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-[#0A0A0A] hover:bg-[#262626] text-white font-bold text-sm sm:text-base tracking-wide transition-all shadow-sm active:scale-98"
+              className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-[#0A0A0A] hover:bg-[#262626] disabled:bg-[#8A8A8A] text-white font-bold text-sm sm:text-base tracking-wide transition-all shadow-sm active:scale-98 cursor-pointer disabled:cursor-not-allowed"
             >
-              <Send className="w-4 h-4 fill-white" />
-              <span>{t.confirmWhatsAppBtn.toUpperCase()}</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>VALIDATION ET ENREGISTREMENT...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 fill-white" />
+                  <span>{t.confirmWhatsAppBtn.toUpperCase()}</span>
+                </>
+              )}
             </button>
             <p className="text-[11px] text-center text-[#8A8A8A]">
               {t.whatsAppOrderNotice.replace('{name}', restaurant.name)}
