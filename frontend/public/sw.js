@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 5.0.0 (Cloud Aiven MySQL Integration & Serverless API Direct Sync)
+// Version: 6.0.0 (Anti-Collision IDs, Live Sales Analytics & Realtime Sync)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v5';
+const CACHE_NAME = 'teranga-pwa-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
