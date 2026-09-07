@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 3.0.0 (Ultra-Responsive Mobile & Real-Time Sync)
+// Version: 4.0.0 (Resilient Order Processing & Instant WhatsApp)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v3';
+const CACHE_NAME = 'teranga-pwa-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

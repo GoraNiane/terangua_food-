@@ -117,11 +117,16 @@ export const ClientCheckoutPage: React.FC = () => {
       // 2. Génération du message WhatsApp officiel avec l'ID réel
       const whatsappUrl = generateWhatsAppUrl(createdOrder, restaurant);
 
-      // 3. Ouvrir WhatsApp si disponible
+      // 3. Ouvrir WhatsApp (immédiatement pour ouvrir l'application WhatsApp)
       try {
-        window.open(whatsappUrl, '_blank');
+        const opened = window.open(whatsappUrl, '_blank');
+        if (!opened) {
+          window.location.href = whatsappUrl;
+          return;
+        }
       } catch {
-        // popup bloqué
+        window.location.href = whatsappUrl;
+        return;
       }
 
       // 4. Redirection vers la confirmation
