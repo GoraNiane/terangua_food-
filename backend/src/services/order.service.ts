@@ -71,9 +71,6 @@ export const createOrder = async (payload: CreateOrderPayload) => {
         );
       });
     }
-    if (!product && allDbProducts.length > 0) {
-      product = allDbProducts[0];
-    }
     if (!product) {
       throw new Error(`Produit introuvable : ${item.name || item.productId}`);
     }
@@ -140,9 +137,13 @@ export const createOrder = async (payload: CreateOrderPayload) => {
 
   // 3. Exécution atomique dans une transaction Prisma
   return await prisma.$transaction(async tx => {
-    const existingOrders = await tx.order.findMany({ select: { id: true } });
+    const recentOrders = await tx.order.findMany({
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
     let maxNum = 1042;
-    for (const o of existingOrders) {
+    for (const o of recentOrders) {
       const parsed = parseInt(o.id.replace(/\D/g, ''), 10);
       if (!isNaN(parsed) && parsed > maxNum) {
         maxNum = parsed;
@@ -317,6 +318,40 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
 };
 
 /**
+ * Formate et assainit une commande pour l'écran Cuisine
+ * RÈGLE STRICTE : AUCUNE DONNÉE FINANCIÈRE (zéro prix, zéro sous-total, zéro montant total)
+ */
+export const sanitizeOrderForKitchen = (o: any) => ({
+  id: o.id,
+  orderNumber: o.orderNumber || `#TF-${o.id}`,
+  customerName: o.customerName,
+  customerPhone: o.customerPhone,
+  tableNumber: o.tableNumber,
+  orderType: o.orderType,
+  notes: o.notes,
+  status: o.status,
+  createdAt: o.createdAt,
+  acceptedAt: o.acceptedAt,
+  preparingAt: o.preparingAt,
+  readyAt: o.readyAt,
+  servedAt: o.servedAt,
+  cancelledAt: o.cancelledAt,
+  items: (o.items || []).map((it: any) => ({
+    id: it.id,
+    productId: it.productId,
+    name: it.name,
+    quantity: it.quantity,
+    selectedOptionsText: it.selectedOptionsText,
+    notes: it.notes,
+  })),
+  statusHistory: (o.statusHistory || []).map((h: any) => ({
+    status: h.status,
+    changedAt: h.changedAt,
+    note: h.note,
+  })),
+});
+
+/**
  * Récupération des commandes pour l'écran Cuisine
  * RÈGLE STRICTE : AUCUNE DONNÉE FINANCIÈRE (zéro prix, zéro CA)
  */
@@ -326,45 +361,15 @@ export const getKitchenOrders = async () => {
       status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY'] },
     },
     include: {
-      items: {
-        select: {
-          id: true,
-          productId: true,
-          name: true,
-          quantity: true,
-          selectedOptionsText: true,
-          notes: true,
-          // STRICTEMENT AUCUN PRIX
-        },
-      },
+      items: true,
       statusHistory: {
         orderBy: { changedAt: 'asc' },
-        select: {
-          status: true,
-          changedAt: true,
-          note: true,
-        },
       },
     },
     orderBy: { createdAt: 'asc' },
   });
 
-  return orders.map(o => ({
-    id: o.id,
-    orderNumber: o.orderNumber || `#TF-${o.id}`,
-    customerName: o.customerName,
-    customerPhone: o.customerPhone,
-    tableNumber: o.tableNumber,
-    orderType: o.orderType,
-    notes: o.notes,
-    status: o.status,
-    createdAt: o.createdAt,
-    acceptedAt: o.acceptedAt,
-    preparingAt: o.preparingAt,
-    readyAt: o.readyAt,
-    items: o.items,
-    statusHistory: o.statusHistory,
-  }));
+  return orders.map(sanitizeOrderForKitchen);
 };
 
 /**

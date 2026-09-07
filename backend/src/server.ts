@@ -27,8 +27,9 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Realtime Rooms
+// Realtime Rooms with Role Authorization
 io.on('connection', socket => {
-  // Join kitchen / admin room
+  // Join kitchen room
   socket.on('join_kitchen', (data?: { token?: string }) => {
     const token = data?.token || socket.handshake.auth?.token;
     if (token) {
@@ -36,22 +37,32 @@ io.on('connection', socket => {
         const decoded = jwt.verify(token, config.jwtSecret) as any;
         if (['ADMIN', 'STAFF', 'KITCHEN'].includes(decoded.role)) {
           socket.join('kitchen');
-          socket.join('admin');
+          if (['ADMIN', 'STAFF'].includes(decoded.role)) {
+            socket.join('admin');
+          }
           return;
         }
       } catch {
         // Token invalide
       }
     }
-
-    // En développement ou local, rejoindre les rooms pour recevoir les notifications
     socket.join('kitchen');
-    socket.join('admin');
   });
 
   socket.on('join_admin', (data?: { token?: string }) => {
-    socket.join('admin');
-    socket.join('kitchen');
+    const token = data?.token || socket.handshake.auth?.token;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, config.jwtSecret) as any;
+        if (['ADMIN', 'STAFF'].includes(decoded.role)) {
+          socket.join('admin');
+          socket.join('kitchen');
+          return;
+        }
+      } catch {
+        // Token invalide
+      }
+    }
   });
 
   // Join order room (suivi client ciblé par ID de commande)

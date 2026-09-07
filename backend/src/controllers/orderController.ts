@@ -25,10 +25,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // 3. Diffusion temps réel Socket.IO (Admin, Cuisine & Client)
     const io = (req.app as any).get('io');
     if (io) {
-      io.emit('order:created', order);
-      io.emit('new_order', order);
-      io.to('kitchen').emit('order:created', order);
-      io.to('kitchen').emit('kitchen_new_order', order);
+      const kitchenOrder = orderService.sanitizeOrderForKitchen(order);
+      io.to('kitchen').emit('order:created', kitchenOrder);
+      io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
       io.to('admin').emit('order:created', order);
       io.to(`order_${order.id}`).emit('order:created', order);
     }
@@ -116,10 +115,11 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
     // Diffusion temps réel Socket.IO (Cuisine, Salle, Client, Admin & Ventes)
     const io = (req.app as any).get('io');
     if (io) {
-      io.emit('order:updated', order);
-      io.emit('order_status_updated', order);
-      io.to('kitchen').emit('order:updated', order);
+      const kitchenOrder = orderService.sanitizeOrderForKitchen(order);
+      io.to('kitchen').emit('order:updated', kitchenOrder);
+      io.to('kitchen').emit('order_status_updated', kitchenOrder);
       io.to('admin').emit('order:updated', order);
+      io.to('admin').emit('order_status_updated', order);
       io.to(`order_${id}`).emit('order:updated', order);
       io.to(`order_${id}`).emit('order_status_updated', order);
 
@@ -131,9 +131,8 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
         });
       }
 
-      // Si une vente a été finalisée lors du passage à SERVED, notifier l'Admin et le Dashboard en direct
+      // Si une vente a été finalisée lors du passage à SERVED, notifier uniquement l'Admin et le Dashboard
       if (saleCreated) {
-        io.emit('sale:created', saleCreated);
         io.to('admin').emit('sale:created', saleCreated);
       }
     }

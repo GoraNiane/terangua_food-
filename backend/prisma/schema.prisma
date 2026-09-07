@@ -182,6 +182,8 @@ model Order {
 
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([customerPhone])
 }
 
 model Sale {

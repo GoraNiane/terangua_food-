@@ -245,24 +245,89 @@ export const getOperationalAndFinancialStatistics = async (filters: StatisticsFi
     kpis: {
       totalRevenue,
       revenueEvolution,
+      revenueEvolutionPercent: revenueEvolution,
       paidOrdersCount,
+      ordersCount: paidOrdersCount,
+      salesCount: paidOrdersCount,
       ordersEvolution,
+      ordersEvolutionPercent: ordersEvolution,
       averageBasket,
+      basketEvolutionPercent: 0,
       totalProductsSold,
+      itemsSold: totalProductsSold,
+      itemsEvolutionPercent: 0,
       totalCustomers,
       topProduct: topProduct?.name || 'N/A',
       topCategory: topCategories[0]?.name || 'N/A',
       bestHour: `${peakHour}00`,
-      bestDay: 'Samedi',
+      bestDay: 'Aujourd’hui',
     },
     chartData,
-    peakHours: Object.entries(hourlyCounts).map(([hour, data]) => ({
-      hour,
-      commandes: data.orders,
-      ca: data.revenue,
-    })),
+    peakHours: Object.entries(hourlyCounts).map(([hour, data]) => {
+      const maxOrders = Math.max(1, maxOrdersInHour);
+      const level = data.orders === 0 ? 1 : Math.min(4, Math.ceil((data.orders / maxOrders) * 4));
+      const label = level === 4 ? 'très élevé' : level === 3 ? 'élevé' : level === 2 ? 'moyen' : 'faible';
+      return {
+        hour,
+        orders: data.orders,
+        commandes: data.orders,
+        revenue: data.revenue,
+        ca: data.revenue,
+        level,
+        label,
+      };
+    }),
     topSellingProducts,
+    topProducts: topSellingProducts.map(p => ({
+      name: p.name,
+      sales: p.sales,
+      revenue: p.revenue,
+      price: p.price,
+      imageUrl: p.image,
+    })),
     topCategories,
+    categories: topCategories.map(c => ({
+      name: c.name,
+      count: c.quantity,
+      revenue: c.revenue,
+      percentage: totalProductsSold > 0 ? Math.round((c.quantity / totalProductsSold) * 100) : 0,
+    })),
+    charts: {
+      evolution: chartData.map(c => ({
+        time: c.time,
+        label: c.time,
+        ca: c.ca,
+        commandes: c.commandes,
+        orders: c.commandes,
+      })),
+      peakHours: Object.entries(hourlyCounts).map(([hour, data]) => {
+        const maxOrders = Math.max(1, maxOrdersInHour);
+        const level = data.orders === 0 ? 1 : Math.min(4, Math.ceil((data.orders / maxOrders) * 4));
+        const label = level === 4 ? 'très élevé' : level === 3 ? 'élevé' : level === 2 ? 'moyen' : 'faible';
+        return {
+          hour,
+          orders: data.orders,
+          commandes: data.orders,
+          revenue: data.revenue,
+          ca: data.revenue,
+          level,
+          label,
+        };
+      }),
+      topProducts: topSellingProducts.map(p => ({
+        name: p.name,
+        sales: p.sales,
+        revenue: p.revenue,
+        price: p.price,
+        imageUrl: p.image,
+      })),
+      categories: topCategories.map(c => ({
+        name: c.name,
+        count: c.quantity,
+        revenue: c.revenue,
+        percentage: totalProductsSold > 0 ? Math.round((c.quantity / totalProductsSold) * 100) : 0,
+      })),
+    },
     insights,
   };
 };
