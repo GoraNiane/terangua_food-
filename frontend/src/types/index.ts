@@ -112,6 +112,7 @@ export interface OrderStatusHistoryItem {
 
 export interface Order {
   id: string; // ex: '1042'
+  orderNumber?: string;
   customerName: string;
   customerPhone: string;
   orderType: OrderType;
@@ -121,6 +122,7 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   deliveryFee: number;
+  discount?: number;
   total: number;
   status: OrderStatus;
   createdAt: string;

@@ -234,11 +234,27 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
   const status =
     newStatus === 'ACCEPTED' ? 'CONFIRMED' : newStatus === 'NEW' ? 'PENDING' : (newStatus as any);
 
+  const cleanId = orderId ? String(orderId).replace(/^[#\s]*TF-/i, '').trim() : '';
+
   return await prisma.$transaction(async tx => {
-    const existing = await tx.order.findUnique({
+    let existing = await tx.order.findUnique({
       where: { id: orderId },
       include: { items: true },
     });
+
+    if (!existing && cleanId && cleanId !== orderId) {
+      existing = await tx.order.findUnique({
+        where: { id: cleanId },
+        include: { items: true },
+      });
+    }
+
+    if (!existing) {
+      existing = await tx.order.findFirst({
+        where: { orderNumber: orderId },
+        include: { items: true },
+      });
+    }
 
     if (!existing) {
       throw new Error(`Commande introuvable : ${orderId}`);
@@ -397,8 +413,16 @@ export const getAllOrders = async (statusFilter?: string) => {
 };
 
 export const getOrderById = async (id: string) => {
-  return await prisma.order.findUnique({
-    where: { id },
+  const cleanId = id ? String(id).replace(/^[#\s]*TF-/i, '').trim() : '';
+  return await prisma.order.findFirst({
+    where: {
+      OR: [
+        { id },
+        ...(cleanId && cleanId !== id ? [{ id: cleanId }] : []),
+        { orderNumber: id },
+        ...(cleanId ? [{ orderNumber: `#TF-${cleanId}` }] : []),
+      ],
+    },
     include: {
       items: {
         include: { options: true },

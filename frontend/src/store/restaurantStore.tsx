@@ -328,9 +328,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const handleNewOrder = (newOrder: Order) => {
         setOrders(prev => {
-          if (prev.some(o => o.id === newOrder.id)) return prev;
+          const existingIndex = prev.findIndex(o => o.id === newOrder.id);
+          if (existingIndex >= 0) {
+            const existing = prev[existingIndex];
+            const merged: Order = {
+              ...existing,
+              ...newOrder,
+              total: newOrder.total !== undefined ? newOrder.total : existing.total,
+              subtotal: newOrder.subtotal !== undefined ? newOrder.subtotal : existing.subtotal,
+              discount: newOrder.discount !== undefined ? newOrder.discount : existing.discount,
+              items: (newOrder.items && newOrder.items.length > 0 && (newOrder.items[0] as any)?.unitPrice !== undefined)
+                ? newOrder.items
+                : existing.items,
+            };
+            const copy = [...prev];
+            copy[existingIndex] = merged;
+            return copy;
+          }
           return [newOrder, ...prev];
         });
+
         // Si c'est une commande sur place, basculer la table en OCCUPIED
         if (newOrder.orderType === 'DINE_IN' && newOrder.tableNumber) {
           const tNum = String(newOrder.tableNumber).trim().padStart(2, '0');
@@ -341,23 +358,38 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     ...t,
                     status: 'OCCUPIED',
                     currentOrderId: newOrder.id,
-                    totalSpentToday: (t.totalSpentToday || 0) + newOrder.total,
+                    totalSpentToday: (t.totalSpentToday || 0) + (newOrder.total || 0),
                   }
                 : t
             )
           );
         }
+
         setNotification({
           id: newOrder.id,
           title: `🔔 Nouvelle commande #${newOrder.id}`,
           subtitle: `${newOrder.customerName} • ${newOrder.orderType === 'DINE_IN' ? `Table ${newOrder.tableNumber}` : 'À emporter / Livraison'}`,
-          amount: newOrder.total,
+          amount: newOrder.total || 0,
         });
         if (isSoundEnabled) playOrderChime();
       };
 
       const handleOrderUpdated = (updated: Order) => {
-        setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
+        setOrders(prev =>
+          prev.map(o => {
+            if (o.id !== updated.id) return o;
+            return {
+              ...o,
+              ...updated,
+              total: updated.total !== undefined ? updated.total : o.total,
+              subtotal: updated.subtotal !== undefined ? updated.subtotal : o.subtotal,
+              discount: updated.discount !== undefined ? updated.discount : o.discount,
+              items: (updated.items && updated.items.length > 0 && (updated.items[0] as any)?.unitPrice !== undefined)
+                ? updated.items
+                : o.items,
+            };
+          })
+        );
         if (updated.tableNumber && (updated.status === 'SERVED' || updated.status === 'CANCELLED')) {
           const tNum = String(updated.tableNumber).trim().padStart(2, '0');
           setTables(prev =>
@@ -459,7 +491,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                   id: latest.id,
                   title: `🔔 Nouvelle commande #${latest.id}`,
                   subtitle: `${latest.customerName} • ${latest.orderType === 'DINE_IN' ? `Table ${latest.tableNumber}` : 'À emporter / Livraison'}`,
-                  amount: latest.total,
+                  amount: latest.total || 0,
                 });
 
                 // Mettre à jour l'état de la table si commande sur place
@@ -472,7 +504,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                             ...t,
                             status: 'OCCUPIED',
                             currentOrderId: latest.id,
-                            totalSpentToday: (t.totalSpentToday || 0) + latest.total,
+                            totalSpentToday: (t.totalSpentToday || 0) + (latest.total || 0),
                           }
                         : t
                     )
@@ -726,7 +758,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 ...t,
                 status: 'OCCUPIED',
                 currentOrderId: createdOrder.id,
-                totalSpentToday: (t.totalSpentToday || 0) + createdOrder.total,
+                totalSpentToday: (t.totalSpentToday || 0) + (createdOrder.total || 0),
               }
             : t
         )

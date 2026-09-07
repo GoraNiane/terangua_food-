@@ -29,7 +29,12 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       io.to('kitchen').emit('order:created', kitchenOrder);
       io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
       io.to('admin').emit('order:created', order);
+      io.to('admin').emit('new_order', order);
       io.to(`order_${order.id}`).emit('order:created', order);
+      const cleanId = String(order.id).replace(/^[#\s]*TF-/i, '').trim();
+      if (cleanId && cleanId !== order.id) {
+        io.to(`order_${cleanId}`).emit('order:created', order);
+      }
     }
 
     res.status(201).json({
@@ -120,14 +125,24 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       io.to('kitchen').emit('order_status_updated', kitchenOrder);
       io.to('admin').emit('order:updated', order);
       io.to('admin').emit('order_status_updated', order);
-      io.to(`order_${id}`).emit('order:updated', order);
-      io.to(`order_${id}`).emit('order_status_updated', order);
+      
+      const cleanId = String(order.id).replace(/^[#\s]*TF-/i, '').trim();
+      const targetRooms = new Set([`order_${order.id}`, `order_${id}`]);
+      if (cleanId) targetRooms.add(`order_${cleanId}`);
+
+      targetRooms.forEach(room => {
+        io.to(room).emit('order:updated', order);
+        io.to(room).emit('order_status_updated', order);
+      });
 
       if (status === 'READY') {
-        io.to(`order_${id}`).emit('order_ready', {
-          orderId: id,
-          orderNumber: order.orderNumber || `#TF-${id}`,
+        const readyPayload = {
+          orderId: order.id,
+          orderNumber: order.orderNumber || `#TF-${order.id}`,
           message: 'Votre commande est prête 🎉',
+        };
+        targetRooms.forEach(room => {
+          io.to(room).emit('order_ready', readyPayload);
         });
       }
 

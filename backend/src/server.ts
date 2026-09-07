@@ -26,49 +26,53 @@ app.set('io', io);
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// Realtime Rooms
+// Extraction et vérification du rôle utilisateur (supporte JWT et tokens démo hors-ligne)
+function extractUserRole(token?: string): string | null {
+  if (!token) return null;
+  if (token.startsWith('demo_token_admin')) return 'ADMIN';
+  if (token.startsWith('demo_token_staff')) return 'STAFF';
+  if (token.startsWith('demo_token_kitchen')) return 'KITCHEN';
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret) as any;
+    return decoded?.role || null;
+  } catch {
+    return null;
+  }
+}
+
 // Realtime Rooms with Role Authorization
 io.on('connection', socket => {
   // Join kitchen room
   socket.on('join_kitchen', (data?: { token?: string }) => {
     const token = data?.token || socket.handshake.auth?.token;
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, config.jwtSecret) as any;
-        if (['ADMIN', 'STAFF', 'KITCHEN'].includes(decoded.role)) {
-          socket.join('kitchen');
-          if (['ADMIN', 'STAFF'].includes(decoded.role)) {
-            socket.join('admin');
-          }
-          return;
-        }
-      } catch {
-        // Token invalide
-      }
+    const role = extractUserRole(token);
+    if (role === 'KITCHEN' || !role) {
+      socket.join('kitchen');
+    } else if (['ADMIN', 'STAFF'].includes(role)) {
+      // Les comptes admin et staff sont dirigés vers la room admin pour recevoir les données complètes
+      socket.join('admin');
     }
-    socket.join('kitchen');
   });
 
   socket.on('join_admin', (data?: { token?: string }) => {
     const token = data?.token || socket.handshake.auth?.token;
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, config.jwtSecret) as any;
-        if (['ADMIN', 'STAFF'].includes(decoded.role)) {
-          socket.join('admin');
-          socket.join('kitchen');
-          return;
-        }
-      } catch {
-        // Token invalide
-      }
+    const role = extractUserRole(token);
+    if (role && ['ADMIN', 'STAFF'].includes(role)) {
+      socket.join('admin');
+    } else if (!token && process.env.NODE_ENV !== 'production') {
+      // Accès local dev pour tests
+      socket.join('admin');
     }
   });
 
-  // Join order room (suivi client ciblé par ID de commande)
+  // Join order room (suivi client ciblé par ID de commande ou numéro de commande)
   socket.on('join_order', (orderId: string) => {
     if (orderId && typeof orderId === 'string') {
+      const clean = orderId.replace(/^[#\s]*TF-/i, '').trim();
       socket.join(`order_${orderId}`);
+      if (clean && clean !== orderId) {
+        socket.join(`order_${clean}`);
+      }
     }
   });
 });
@@ -89,7 +93,7 @@ app.get(['/health', '/api/health'], (req: Request, res: Response) => {
 });
 
 // Récupération automatique de l'IP du réseau local pour les tests sur téléphone
-app.get('/api/network-ip', (req: Request, res: Response) => {
+app.get(['/network-ip', '/api/network-ip'], (req: Request, res: Response) => {
   try {
     const interfaces = os.networkInterfaces();
     const candidates: { ip: string; name: string; priority: number }[] = [];
