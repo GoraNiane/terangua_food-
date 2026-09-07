@@ -13,7 +13,7 @@ createRoot(document.getElementById('root')!).render(
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
         console.log('[PWA] Service Worker actif, scope:', registration.scope);
 
@@ -23,18 +23,22 @@ if ('serviceWorker' in navigator) {
           if (installingWorker) {
             installingWorker.addEventListener('statechange', () => {
               if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] Nouvelle version v3 prête. Mise à jour automatique.');
+                console.log('[PWA] Nouvelle version v6 prête. Mise à jour automatique.');
               }
             });
           }
         });
 
-        // Forcer la vérification de mise à jour au retour sur l'onglet
+        // Forcer la vérification de mise à jour au retour sur l'onglet et toutes les minutes
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             registration.update().catch(() => {});
           }
         });
+
+        setInterval(() => {
+          registration.update().catch(() => {});
+        }, 60 * 1000);
       })
       .catch((err) => {
         console.warn('[PWA] Enregistrement Service Worker reporté:', err);
