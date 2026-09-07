@@ -136,9 +136,10 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       });
 
       if (status === 'READY') {
+        const orderNum = (order as any)?.orderNumber || (order.id ? `#TF-${order.id}` : `#TF-${id}`);
         const readyPayload = {
-          orderId: order.id,
-          orderNumber: order.orderNumber || `#TF-${order.id}`,
+          orderId: order.id || id,
+          orderNumber: orderNum,
           message: 'Votre commande est prête 🎉',
         };
         targetRooms.forEach(room => {
@@ -152,8 +153,9 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       }
     }
 
+    const displayNum = (order as any)?.orderNumber || (order.id ? `#TF-${order.id}` : `#TF-${id}`);
     res.json({
-      message: `Statut de la commande #${id} mis à jour vers ${status}`,
+      message: `Statut de la commande ${displayNum} mis à jour vers ${status}`,
       order,
       sale: saleCreated || null,
     });

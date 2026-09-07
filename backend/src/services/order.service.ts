@@ -293,7 +293,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
 
     // 1. Mettre à jour la commande
     const updated = await tx.order.update({
-      where: { id: orderId },
+      where: { id: existing.id },
       data: {
         status,
         ...timestampUpdates,
@@ -317,7 +317,7 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
     // 2. Si la commande passe à SERVED : Création automatique et idempotente de la Vente (Règle 12 & 13)
     let saleCreated: any = null;
     if (status === 'SERVED') {
-      const saleResult = await finalizeOrderSale(orderId, updated.total, tx);
+      const saleResult = await finalizeOrderSale(existing.id, updated.total, tx);
       saleCreated = saleResult.sale;
     }
 
