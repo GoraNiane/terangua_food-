@@ -17,7 +17,7 @@ export interface CreateOrderItemInput {
 export interface CreateOrderPayload {
   customerName: string;
   customerPhone: string;
-  orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  orderType?: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | null;
   tableNumber?: string | null;
   deliveryAddress?: string | null;
   notes?: string | null;
@@ -29,10 +29,11 @@ export interface CreateOrderPayload {
  * RÈGLE SÉCURITÉ : Ne JAMAIS faire confiance au prix envoyé par le client
  */
 export const createOrder = async (payload: CreateOrderPayload) => {
-  const { customerName, customerPhone, orderType, tableNumber, deliveryAddress, notes, items } = payload;
+  const { customerName, customerPhone, tableNumber, deliveryAddress, notes, items } = payload;
+  const orderType = payload.orderType || 'DINE_IN';
 
   const formattedTableNumber =
-    orderType === 'DINE_IN' && tableNumber ? String(tableNumber.trim()).padStart(2, '0') : null;
+    orderType === 'DINE_IN' && tableNumber ? String(tableNumber).trim().padStart(2, '0') : null;
 
   // 1. Récupération et vérification des produits en base de données
   const allDbProducts = await prisma.product.findMany({
@@ -53,7 +54,7 @@ export const createOrder = async (payload: CreateOrderPayload) => {
       .replace(/[^a-zA-Z0-9]/g, '')
       .toLowerCase();
 
-  const resolvedItems: Array<{ item: CreateOrderItemInput; product: (typeof allDbProducts)[0] }> = [];
+  const resolvedItems: Array<{ item: CreateOrderItemInput; product: (typeof allDbProducts)[number] }> = [];
 
   for (const item of items) {
     let product = productById.get(item.productId);
@@ -199,9 +200,10 @@ export const createOrder = async (payload: CreateOrderPayload) => {
       });
     }
 
-    // CRM & Fidélité
+    // CRM & Fidélité avec numéro nettoyé (sans espaces)
+    const cleanPhone = customerPhone.replace(/\s+/g, '').trim();
     await tx.customer.upsert({
-      where: { phone: customerPhone.trim() },
+      where: { phone: cleanPhone },
       update: {
         name: customerName.trim(),
         ordersCount: { increment: 1 },
@@ -210,7 +212,7 @@ export const createOrder = async (payload: CreateOrderPayload) => {
       },
       create: {
         name: customerName.trim(),
-        phone: customerPhone.trim(),
+        phone: cleanPhone,
         ordersCount: 1,
         totalSpent: calculatedTotal,
         loyaltyPoints: 10,
@@ -231,8 +233,15 @@ export const createOrder = async (payload: CreateOrderPayload) => {
  * Mise à jour de statut avec enregistrement des horodatages et déclenchement de la vente
  */
 export const updateOrderStatus = async (orderId: string, newStatus: string, note?: string | null) => {
+  const upperStatus = String(newStatus || '').toUpperCase().trim();
   const status =
-    newStatus === 'ACCEPTED' ? 'CONFIRMED' : newStatus === 'NEW' ? 'PENDING' : (newStatus as any);
+    upperStatus === 'ACCEPTED'
+      ? 'CONFIRMED'
+      : upperStatus === 'NEW'
+      ? 'PENDING'
+      : upperStatus === 'DELIVERED'
+      ? 'SERVED'
+      : (upperStatus as any);
 
   const cleanId = orderId ? String(orderId).replace(/^[#\s]*TF-/i, '').trim() : '';
 
@@ -323,8 +332,14 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
 
     // 3. Si la commande est servie ou annulée, libérer la table
     if (updated.tableNumber && (status === 'SERVED' || status === 'CANCELLED')) {
+      const formattedTable = String(updated.tableNumber).trim().padStart(2, '0');
       await tx.table.updateMany({
-        where: { number: updated.tableNumber },
+        where: {
+          OR: [
+            { number: updated.tableNumber },
+            { number: formattedTable },
+          ],
+        },
         data: { status: 'FREE', currentOrderId: null },
       });
     }
@@ -338,32 +353,32 @@ export const updateOrderStatus = async (orderId: string, newStatus: string, note
  * RÈGLE STRICTE : AUCUNE DONNÉE FINANCIÈRE (zéro prix, zéro sous-total, zéro montant total)
  */
 export const sanitizeOrderForKitchen = (o: any) => ({
-  id: o.id,
-  orderNumber: o.orderNumber || `#TF-${o.id}`,
-  customerName: o.customerName,
-  customerPhone: o.customerPhone,
-  tableNumber: o.tableNumber,
-  orderType: o.orderType,
-  notes: o.notes,
-  status: o.status,
-  createdAt: o.createdAt,
-  acceptedAt: o.acceptedAt,
-  preparingAt: o.preparingAt,
-  readyAt: o.readyAt,
-  servedAt: o.servedAt,
-  cancelledAt: o.cancelledAt,
-  items: (o.items || []).map((it: any) => ({
-    id: it.id,
-    productId: it.productId,
-    name: it.name,
-    quantity: it.quantity,
-    selectedOptionsText: it.selectedOptionsText,
-    notes: it.notes,
+  id: o?.id || '',
+  orderNumber: o?.orderNumber || (o?.id ? `#TF-${o.id}` : ''),
+  customerName: o?.customerName || '',
+  customerPhone: o?.customerPhone || '',
+  tableNumber: o?.tableNumber || null,
+  orderType: o?.orderType || 'DINE_IN',
+  notes: o?.notes || null,
+  status: o?.status || 'PENDING',
+  createdAt: o?.createdAt || new Date(),
+  acceptedAt: o?.acceptedAt || null,
+  preparingAt: o?.preparingAt || null,
+  readyAt: o?.readyAt || null,
+  servedAt: o?.servedAt || null,
+  cancelledAt: o?.cancelledAt || null,
+  items: (o?.items || []).map((it: any) => ({
+    id: it?.id,
+    productId: it?.productId,
+    name: it?.name,
+    quantity: it?.quantity,
+    selectedOptionsText: it?.selectedOptionsText,
+    notes: it?.notes,
   })),
-  statusHistory: (o.statusHistory || []).map((h: any) => ({
-    status: h.status,
-    changedAt: h.changedAt,
-    note: h.note,
+  statusHistory: (o?.statusHistory || []).map((h: any) => ({
+    status: h?.status,
+    changedAt: h?.changedAt,
+    note: h?.note,
   })),
 });
 
@@ -389,12 +404,15 @@ export const getKitchenOrders = async () => {
 };
 
 /**
- * Récupération des commandes pour l'écran Admin
+ * Récupération des commandes pour l'écran Admin (supporte filtres sensibles ou insensibles à la casse)
  */
 export const getAllOrders = async (statusFilter?: string) => {
   const whereClause: any = {};
-  if (statusFilter && statusFilter !== 'ALL') {
-    whereClause.status = statusFilter;
+  if (statusFilter && statusFilter.trim()) {
+    const upper = statusFilter.trim().toUpperCase();
+    if (upper !== 'ALL') {
+      whereClause.status = upper;
+    }
   }
 
   return await prisma.order.findMany({
@@ -413,7 +431,8 @@ export const getAllOrders = async (statusFilter?: string) => {
 };
 
 export const getOrderById = async (id: string) => {
-  const cleanId = id ? String(id).replace(/^[#\s]*TF-/i, '').trim() : '';
+  if (!id || typeof id !== 'string') return null;
+  const cleanId = String(id).replace(/^[#\s]*TF-/i, '').trim();
   return await prisma.order.findFirst({
     where: {
       OR: [
