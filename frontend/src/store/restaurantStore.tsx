@@ -405,6 +405,103 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [isSoundEnabled]);
 
+  // Synchronisation automatique d'arrière-plan multi-appareils (Cloud Sync Polling)
+  // Permet à la Cuisine et à l'Admin de recevoir les commandes à la seconde près même sur Vercel/4G
+  useEffect(() => {
+    let isPolling = false;
+
+    const syncRemoteOrders = async () => {
+      const token = getAuthToken();
+      if (!token || isPolling) return;
+      isPolling = true;
+
+      try {
+        let ordersUrl = `${BACKEND_URL}/api/orders`;
+        try {
+          const userStr = localStorage.getItem('teranga_auth_user') || sessionStorage.getItem('teranga_auth_user');
+          if (userStr) {
+            const u = JSON.parse(userStr);
+            if (u.role === 'KITCHEN') {
+              ordersUrl = `${BACKEND_URL}/api/orders/kitchen`;
+            }
+          }
+        } catch {}
+
+        const res = await fetch(ordersUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null);
+
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && Array.isArray(data.orders)) {
+            setOrders(prev => {
+              const currentIds = new Set(prev.map(o => o.id));
+              const newIncomingOrders = data.orders.filter((o: Order) => !currentIds.has(o.id));
+
+              if (newIncomingOrders.length > 0) {
+                // Alerte sonore pour les nouvelles commandes en attente
+                const hasPending = newIncomingOrders.some((o: Order) => o.status === 'PENDING');
+                if (hasPending && isSoundEnabled) {
+                  playOrderChime();
+                }
+
+                // Notification visuelle
+                const latest = newIncomingOrders[0];
+                setNotification({
+                  id: latest.id,
+                  title: `🔔 Nouvelle commande #${latest.id}`,
+                  subtitle: `${latest.customerName} • ${latest.orderType === 'DINE_IN' ? `Table ${latest.tableNumber}` : 'À emporter / Livraison'}`,
+                  amount: latest.total,
+                });
+
+                // Mettre à jour l'état de la table si commande sur place
+                if (latest.orderType === 'DINE_IN' && latest.tableNumber) {
+                  const tNum = String(latest.tableNumber).trim().padStart(2, '0');
+                  setTables(prevTables =>
+                    prevTables.map(t =>
+                      t.number === tNum
+                        ? {
+                            ...t,
+                            status: 'OCCUPIED',
+                            currentOrderId: latest.id,
+                            totalSpentToday: (t.totalSpentToday || 0) + latest.total,
+                          }
+                        : t
+                    )
+                  );
+                }
+
+                return [...newIncomingOrders, ...prev];
+              }
+
+              // Synchroniser les statuts modifiés par d'autres collègues en cuisine ou caisse
+              const incomingMap = new Map<string, Order>(data.orders.map((o: Order) => [o.id, o]));
+              let hasChanges = false;
+              const updated = prev.map(o => {
+                const inc = incomingMap.get(o.id);
+                if (inc && inc.status !== o.status) {
+                  hasChanges = true;
+                  return { ...o, status: inc.status, statusHistory: inc.statusHistory || o.statusHistory };
+                }
+                return o;
+              });
+
+              return hasChanges ? updated : prev;
+            });
+          }
+        }
+      } catch {
+        // En cas d'indisponibilité momentanée du réseau
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    // Vérification toutes les 3.5 secondes pour une réactivité instantanée
+    const interval = setInterval(syncRemoteOrders, 3500);
+    return () => clearInterval(interval);
+  }, [isSoundEnabled]);
+
   // Sauvegarde permanente dans le localStorage
   useEffect(() => {
     try {
