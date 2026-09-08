@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 6.0.0 (Anti-Collision IDs, Live Sales Analytics & Realtime Sync)
+// Version: 7.0.0 (Safe-Area Insets iOS, Dynamic Notch Clearance & Mobile Header Clarity)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v6';
+const CACHE_NAME = 'teranga-pwa-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
