@@ -13,7 +13,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenCart }) => {
   const { t } = useLanguage();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 sm:hidden bg-white/95 backdrop-blur-md border-t border-[#EEEEEE] px-3 py-2 shadow-sm">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-40 sm:hidden bg-white/95 backdrop-blur-md border-t border-[#EEEEEE] px-3 pt-2 shadow-sm"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+    >
       <div className="flex items-center justify-around">
         <NavLink
           to="/"

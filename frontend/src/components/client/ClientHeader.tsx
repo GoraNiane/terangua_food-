@@ -63,18 +63,21 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
   ] as const;
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-full overflow-x-clip bg-white/95 backdrop-blur-md transition-all">
+    <header
+      className="sticky top-0 z-40 w-full max-w-full overflow-x-clip bg-white border-b border-[#EAEAEA] transition-all shadow-xs"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       {/* Navigation principale TERANGA FOOD */}
-      <div className="border-b border-[#EEEEEE] px-2.5 sm:px-4 py-2 sm:py-3 w-full">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-1.5 sm:gap-4 min-w-0 w-full">
+      <div className="px-3 sm:px-5 py-2.5 sm:py-3.5 w-full">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 sm:gap-4 min-w-0 w-full">
           {/* Brand / Logo avec porte d'accès cachée (5 clics) */}
           <Link
             to="/"
             onClick={handleLogoClick}
-            className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial select-none cursor-pointer group"
+            className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial select-none cursor-pointer group"
             title={restaurant.name}
           >
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border border-[#EAEAEA] bg-[#FAFAFA] flex items-center justify-center transition-transform group-hover:scale-105 shadow-xs shrink-0">
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden border border-[#0A0A0A]/10 bg-[#FAFAFA] flex items-center justify-center transition-transform group-hover:scale-105 shadow-xs shrink-0">
               <img
                 src={restaurant.logoUrl}
                 alt={restaurant.name}
@@ -85,10 +88,12 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
               <span className="font-sans font-extrabold text-xs xs:text-sm sm:text-base md:text-lg tracking-tight text-[#0A0A0A] block truncate leading-tight">
                 {restaurant.name}
               </span>
-              <p className="text-[10px] sm:text-[11px] text-[#8A8A8A] tracking-normal truncate hidden sm:block">
+              <p className="text-[10px] sm:text-[11px] text-[#666666] font-medium tracking-normal truncate hidden sm:flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 inline-block"></span>
                 Dakar • {getRestaurantSlogan(lang)}
               </p>
-              <p className="text-[9px] xs:text-[10px] text-[#8A8A8A] tracking-normal truncate sm:hidden">
+              <p className="text-[10px] text-[#666666] font-medium tracking-normal truncate sm:hidden flex items-center gap-1 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 inline-block"></span>
                 Dakar
               </p>
             </div>
@@ -142,9 +147,9 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
               }}
               aria-label={t.searchAction}
               title={t.searchAction}
-              className="flex items-center justify-center w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full text-xs text-[#666666] hover:text-[#0A0A0A] border border-[#EAEAEA] hover:border-[#0A0A0A] transition-colors font-medium bg-white shadow-xs shrink-0"
+              className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl text-xs text-[#0A0A0A] hover:bg-[#F5F5F5] border border-[#E5E5E5] transition-all font-semibold bg-[#FAFAFA] shadow-xs shrink-0 active:scale-95"
             >
-              <Search className="w-3.5 h-3.5 shrink-0" />
+              <Search className="w-4 h-4 shrink-0 text-[#0A0A0A]" />
               <span className="hidden sm:inline ml-1.5">{t.searchAction}</span>
             </button>
 
@@ -155,31 +160,31 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
                   const newTable = prompt(t.tableChangePrompt, activeTable);
                   if (newTable !== null) setActiveTable(newTable.trim() || null);
                 }}
-                className="flex items-center gap-1 sm:gap-1.5 bg-[#0A0A0A] text-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold hover:bg-[#262626] transition-colors shrink-0"
+                className="flex items-center gap-1 sm:gap-1.5 bg-[#0A0A0A] text-white h-9 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold hover:bg-[#262626] transition-colors shrink-0 shadow-xs"
                 title={t.changeBtn}
               >
-                <QrCode className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <QrCode className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">{t.tableLabel} {activeTable}</span>
                 <span className="sm:hidden">T.{activeTable}</span>
               </button>
             )}
 
-            {/* Action 2: Langue Responsive (Menu déroulant compact sur mobile, pilule complète sur desktop) */}
+            {/* Action 2: Langue Responsive */}
             <div className="relative shrink-0" ref={langMenuRef}>
               {/* Trigger Mobile (< md) */}
               <button
                 onClick={() => setIsLangOpen(!isLangOpen)}
                 aria-label="Changer de langue"
-                className="md:hidden flex items-center gap-1 text-[10px] font-bold text-[#0A0A0A] bg-[#FAFAFA] border border-[#EAEAEA] hover:border-[#0A0A0A] px-2 py-1 rounded-full transition-colors shadow-xs"
+                className="md:hidden flex items-center gap-1 text-xs font-bold text-[#0A0A0A] bg-[#FAFAFA] hover:bg-[#F5F5F5] border border-[#E5E5E5] h-9 px-2.5 rounded-xl transition-all shadow-xs active:scale-95"
               >
-                <Globe className="w-3 h-3 text-[#666666]" />
+                <Globe className="w-3.5 h-3.5 text-[#0A0A0A]" />
                 <span className="uppercase">{lang}</span>
-                <ChevronDown className={`w-2.5 h-2.5 text-[#8A8A8A] transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3 h-3 text-[#737373] transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Popover Mobile Dropdown */}
               {isLangOpen && (
-                <div className="absolute right-0 top-full mt-2 w-32 bg-white border border-[#EAEAEA] rounded-2xl shadow-xl py-1 z-50 animate-fade-in">
+                <div className="absolute right-0 top-full mt-2 w-36 bg-white border border-[#EAEAEA] rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in">
                   {languagesList.map(l => (
                     <button
                       key={l.code}
@@ -192,22 +197,22 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        <span className="text-sm">{l.flag}</span>
+                        <span className="text-base">{l.flag}</span>
                         <span>{l.label}</span>
                       </span>
-                      {lang === l.code && <Check className="w-3.5 h-3.5 text-[#0A0A0A]" />}
+                      {lang === l.code && <Check className="w-4 h-4 text-[#0A0A0A]" />}
                     </button>
                   ))}
                 </div>
               )}
 
               {/* Segmented Pill Desktop (>= md) */}
-              <div className="hidden md:flex items-center bg-[#FAFAFA] border border-[#EAEAEA] rounded-full p-0.5 text-[10px] font-bold">
+              <div className="hidden md:flex items-center bg-[#FAFAFA] border border-[#E5E5E5] rounded-xl p-0.5 text-[11px] font-bold">
                 {languagesList.map(l => (
                   <button
                     key={l.code}
                     onClick={() => changeLang(l.code)}
-                    className={`px-2 py-0.5 rounded-full transition-all ${
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
                       lang === l.code
                         ? 'bg-[#0A0A0A] text-white shadow-xs'
                         : 'text-[#666666] hover:text-[#0A0A0A]'
@@ -220,16 +225,16 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
               </div>
             </div>
 
-            {/* Action 3: Panier (Toujours 100% visible et cliquable) */}
+            {/* Action 3: Panier (Bouton Premium Sombre à Fort Contraste avec Pastille Dorée) */}
             <button
               onClick={onOpenCart}
               aria-label={t.navCart}
               title={t.navCart}
-              className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-[#EAEAEA] hover:border-[#0A0A0A] text-[#0A0A0A] transition-all duration-200 active:scale-95 shadow-xs shrink-0"
+              className="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#0A0A0A] hover:bg-[#262626] text-white transition-all duration-200 active:scale-95 shadow-sm shrink-0"
             >
-              <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <ShoppingBag className="w-4 h-4 text-white" />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#0A0A0A] text-white text-[9px] font-bold">
+                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-black text-[10px] font-black shadow-xs ring-2 ring-white animate-pulse">
                   {cartCount}
                 </span>
               )}
@@ -238,10 +243,10 @@ export const ClientHeader: React.FC<ClientHeaderProps> = ({ onOpenCart }) => {
             {/* Action 4: Commander CTA (Grand écran uniquement) */}
             <Link
               to="/menu"
-              className="hidden xl:inline-flex items-center gap-1.5 bg-[#0A0A0A] hover:bg-[#262626] text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-xs active:scale-95 shrink-0"
+              className="hidden xl:inline-flex items-center gap-1.5 bg-[#0A0A0A] hover:bg-[#262626] text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs active:scale-95 shrink-0"
             >
               <span>{t.orderBtn}</span>
-              <ArrowRight className="w-3 h-3" />
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>
