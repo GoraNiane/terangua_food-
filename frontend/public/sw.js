@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 7.0.0 (Safe-Area Insets iOS, Dynamic Notch Clearance & Mobile Header Clarity)
+// Version: 8.0.0 (Wave & Orange Money Direct Mobile Payment Buttons)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v7';
+const CACHE_NAME = 'teranga-pwa-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

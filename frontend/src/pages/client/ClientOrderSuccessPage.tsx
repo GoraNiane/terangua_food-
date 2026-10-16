@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Check, ArrowRight, Utensils, MapPin, Send } from 'lucide-react';
+import { Check, ArrowRight, Utensils, MapPin, Send, MessageCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { formatFCFA, generateWhatsAppUrl } from '../../services/whatsappService';
 import { useLanguage } from '../../services/i18n';
 import { API_BASE_URL } from '../../config/api';
 import { Order } from '../../types';
+import { PaymentActionButtons } from '../../components/client/PaymentActionButtons';
 
 export const ClientOrderSuccessPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -156,16 +157,22 @@ export const ClientOrderSuccessPage: React.FC = () => {
           </div>
         </div>
 
-        {/* WhatsApp CTA Button */}
-        <a
-          href={generateWhatsAppUrl(order, restaurant)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-white border border-[#0A0A0A] text-xs font-bold text-[#0A0A0A] hover:bg-[#FAFAFA] transition-all shadow-sm active:scale-98"
-        >
-          <Send className="w-4 h-4 text-[#0A0A0A]" />
-          <span>{t.sendWhatsAppBtn}</span>
-        </a>
+        {/* Mobile Payment Actions (Wave & Orange Money) */}
+        <div className="bg-white p-5 rounded-2xl border border-[#EAEAEA] shadow-soft space-y-4">
+          <PaymentActionButtons order={order} restaurant={restaurant} />
+          
+          <div className="pt-2 border-t border-[#EEEEEE] flex justify-center">
+            <a
+              href={generateWhatsAppUrl(order, restaurant)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#8A8A8A] hover:text-[#0A0A0A] transition-colors"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>Besoin d'aide ? Écrire au restaurant sur WhatsApp</span>
+            </a>
+          </div>
+        </div>
       </div>
 
       {/* Bottom CTA — SUIVRE MA COMMANDE & RETOUR */}

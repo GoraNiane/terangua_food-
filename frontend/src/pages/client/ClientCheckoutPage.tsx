@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Send, Utensils, ShoppingBag, MapPin, Phone, User, MessageSquare, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Utensils, ShoppingBag, MapPin, Phone, User, MessageSquare, AlertCircle } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { OrderType } from '../../types';
@@ -114,22 +114,7 @@ export const ClientCheckoutPage: React.FC = () => {
         total: grandTotal,
       });
 
-      // 2. Génération du message WhatsApp officiel avec l'ID réel
-      const whatsappUrl = generateWhatsAppUrl(createdOrder, restaurant);
-
-      // 3. Ouvrir WhatsApp (immédiatement pour ouvrir l'application WhatsApp)
-      try {
-        const opened = window.open(whatsappUrl, '_blank');
-        if (!opened) {
-          window.location.href = whatsappUrl;
-          return;
-        }
-      } catch {
-        window.location.href = whatsappUrl;
-        return;
-      }
-
-      // 4. Redirection vers la confirmation
+      // 2. Redirection directe vers la page de confirmation (avec choix de paiement Wave et Orange Money)
       navigate(`/order-confirmation/${createdOrder.id}`);
     } catch (err: any) {
       console.error('Erreur confirmation commande :', err);
@@ -410,7 +395,7 @@ export const ClientCheckoutPage: React.FC = () => {
             </div>
           )}
 
-          {/* WhatsApp Submit Action */}
+          {/* Submit Action */}
           <div className="space-y-2.5">
             <button
               type="submit"
@@ -424,13 +409,17 @@ export const ClientCheckoutPage: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4 fill-white" />
-                  <span>{t.confirmWhatsAppBtn.toUpperCase()}</span>
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <span>{t.confirmOrderBtn.toUpperCase()} • {formatFCFA(grandTotal)}</span>
                 </>
               )}
             </button>
-            <p className="text-[11px] text-center text-[#8A8A8A]">
-              {t.whatsAppOrderNotice.replace('{name}', restaurant.name)}
+            <p className="text-[11px] text-center text-[#8A8A8A] flex items-center justify-center gap-1.5 flex-wrap">
+              <span>Règlement instantané par</span>
+              <span className="font-bold text-[#1DC3F2]">Wave</span>
+              <span>ou</span>
+              <span className="font-bold text-[#FF7900]">Orange Money</span>
+              <span>dès la validation.</span>
             </p>
           </div>
         </form>

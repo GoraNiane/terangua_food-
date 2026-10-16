@@ -138,6 +138,11 @@ export interface Translations {
   orderSummaryTitle: string;
   totalToPayLabel: string;
   confirmWhatsAppBtn: string;
+  confirmOrderBtn: string;
+  payWithWaveBtn: string;
+  payWithOMBtn: string;
+  paymentMethodsTitle: string;
+  paymentMethodsSubtitle: string;
   validationNameRequired: string;
   validationPhoneRequired: string;
   validationPhoneInvalid: string;
@@ -458,6 +463,11 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orderSummaryTitle: 'RÉCAPITULATIF DE LA COMMANDE',
     totalToPayLabel: 'Total à payer',
     confirmWhatsAppBtn: 'Confirmer et envoyer sur WhatsApp',
+    confirmOrderBtn: 'Confirmer et commander',
+    payWithWaveBtn: 'Payer avec Wave',
+    payWithOMBtn: 'Payer avec Orange Money',
+    paymentMethodsTitle: 'RÈGLEMENT DE LA COMMANDE',
+    paymentMethodsSubtitle: 'Sélectionnez votre moyen de paiement mobile :',
     validationNameRequired: 'Veuillez renseigner votre nom complet',
     validationPhoneRequired: 'Le numéro de téléphone est requis',
     validationPhoneInvalid: 'Numéro de téléphone invalide (ex: 77 123 45 67)',
@@ -777,6 +787,11 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orderSummaryTitle: 'ORDER SUMMARY',
     totalToPayLabel: 'Total to pay',
     confirmWhatsAppBtn: 'Confirm & Send to WhatsApp',
+    confirmOrderBtn: 'Confirm & Place Order',
+    payWithWaveBtn: 'Pay with Wave',
+    payWithOMBtn: 'Pay with Orange Money',
+    paymentMethodsTitle: 'ORDER PAYMENT',
+    paymentMethodsSubtitle: 'Select your preferred mobile payment method:',
     validationNameRequired: 'Please enter your full name',
     validationPhoneRequired: 'Phone number is required',
     validationPhoneInvalid: 'Invalid phone number (e.g. 77 123 45 67)',
@@ -1096,6 +1111,11 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     orderSummaryTitle: 'LI NGA JËND LÉPP',
     totalToPayLabel: 'Njëg li yépp',
     confirmWhatsAppBtn: 'Dégël te yónnee ci WhatsApp',
+    confirmOrderBtn: 'Dégël sama ndigal',
+    payWithWaveBtn: 'Fey ak Wave',
+    payWithOMBtn: 'Fey ak Orange Money',
+    paymentMethodsTitle: 'FEY SA NDIGAL',
+    paymentMethodsSubtitle: 'Tànnal sa feyin ci telefon :',
     validationNameRequired: 'Bindal sa tur ak sa sant bu bax',
     validationPhoneRequired: 'Nimero telefon dafa laaj',
     validationPhoneInvalid: 'Nimero telefon bi baaxul (misaal: 77 123 45 67)',

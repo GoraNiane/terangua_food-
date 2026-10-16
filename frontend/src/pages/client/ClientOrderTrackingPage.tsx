@@ -20,6 +20,7 @@ import { Order, OrderStatus } from '../../types';
 import { useLanguage, getProductName, getOptionItemName } from '../../services/i18n';
 import { API_BASE_URL, WS_URL } from '../../config/api';
 import { io as socketIOClient } from 'socket.io-client';
+import { PaymentActionButtons } from '../../components/client/PaymentActionButtons';
 
 export const ClientOrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -387,6 +388,13 @@ export const ClientOrderTrackingPage: React.FC = () => {
             <span className="font-mono">{formatFCFA(order.total)}</span>
           </div>
         </div>
+
+        {/* Mobile Payment Actions (Wave & Orange Money) */}
+        {order.status !== 'CANCELLED' && (
+          <div className="bg-white rounded-3xl p-6 border border-[#EAEAEA] shadow-soft">
+            <PaymentActionButtons order={order} restaurant={restaurant} />
+          </div>
+        )}
 
         {/* Customer Review Section (Prompt Section 51) */}
         {(order.status === 'READY' || order.status === 'SERVED' || currentStep >= 4) && (
