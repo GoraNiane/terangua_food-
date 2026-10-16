@@ -400,7 +400,7 @@ export const sanitizeOrderForKitchen = (o: any) => ({
 export const getKitchenOrders = async () => {
   const orders = await prisma.order.findMany({
     where: {
-      status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY'] },
+      status: { in: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED'] },
     },
     include: {
       items: true,
@@ -408,10 +408,78 @@ export const getKitchenOrders = async () => {
         orderBy: { changedAt: 'asc' },
       },
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
   });
 
   return orders.map(sanitizeOrderForKitchen);
+};
+
+/**
+ * Confirmation de paiement Wave ou Orange Money par le client
+ */
+export const confirmPayment = async (
+  orderId: string,
+  params: { method: string; amount?: number; note?: string; transactionRef?: string }
+) => {
+  return await prisma.$transaction(async tx => {
+    let existing = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!existing) {
+      const clean = orderId.replace(/^[#\s]*TF-/i, '').trim();
+      existing = await tx.order.findUnique({
+        where: { id: clean },
+        include: { items: true },
+      });
+    }
+    if (!existing) {
+      existing = await tx.order.findFirst({
+        where: { orderNumber: orderId },
+        include: { items: true },
+      });
+    }
+
+    if (!existing) {
+      throw new Error(`Commande introuvable : ${orderId}`);
+    }
+
+    const methodLabel = params.method === 'OM' ? 'Orange Money' : 'Wave';
+    const payNote =
+      params.note ||
+      `Paiement ${methodLabel} validé par le client (${params.amount ? `${params.amount} FCFA` : 'montant pré-rempli'})`;
+
+    // Ajouter le tag de paiement dans les notes pour visibilité immédiate en cuisine et en caisse
+    let currentNotes = existing.notes || '';
+    const paymentTag = `[Payé via ${methodLabel}]`;
+    if (!currentNotes.includes(paymentTag)) {
+      currentNotes = currentNotes ? `${currentNotes} • ${paymentTag}` : paymentTag;
+    }
+
+    const updated = await tx.order.update({
+      where: { id: existing.id },
+      data: {
+        notes: currentNotes,
+        statusHistory: {
+          create: {
+            status: existing.status,
+            note: payNote,
+          },
+        },
+      },
+      include: {
+        items: {
+          include: { options: true },
+        },
+        statusHistory: {
+          orderBy: { changedAt: 'asc' },
+        },
+      },
+    });
+
+    return updated;
+  });
 };
 
 /**

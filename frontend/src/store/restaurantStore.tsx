@@ -81,6 +81,7 @@ interface RestaurantContextType extends StoreState {
     deliveryFee: number;
     total: number;
   }) => Promise<Order>;
+  confirmOrderPayment: (orderId: string, paymentMethod: 'WAVE' | 'OM', amount?: number) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => Promise<void>;
   updateTableStatus: (tableNumber: string, status: TableStatus) => void;
   addTable: (tableData: { number: string; capacity: number; area?: string; status?: TableStatus }) => Promise<void>;
@@ -298,9 +299,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     fetchBackendData();
   }, []);
 
-  // Connexion Socket.IO temps réel avec le serveur MariaDB
+  // 1. Connexion Socket.IO temps réel avec le serveur (si disponible)
   useEffect(() => {
-    // Si on est sur Vercel sans WebSocket externe configuré, éviter de lancer des boucles de polling réseau
     const isVercelWithoutWs =
       typeof window !== 'undefined' &&
       window.location.hostname.includes('vercel.app') &&
@@ -308,137 +308,174 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     if (isVercelWithoutWs) {
       setIsOnline(true);
-      return;
     }
 
     let socket: Socket | null = null;
-    try {
-      const token = getAuthToken();
-      socket = socketIOClient(BACKEND_URL, {
-        auth: { token },
-        reconnectionAttempts: 5,
-        timeout: 3000,
-        transports: ['websocket', 'polling'],
-      });
-
-      socket.on('connect', () => {
-        setIsOnline(true);
-        socket?.emit('join_kitchen', { token });
-        socket?.emit('join_admin', { token });
-      });
-
-      const handleNewOrder = (newOrder: Order) => {
-        setOrders(prev => {
-          const existingIndex = prev.findIndex(o => o.id === newOrder.id);
-          if (existingIndex >= 0) {
-            const existing = prev[existingIndex];
-            const merged: Order = {
-              ...existing,
-              ...newOrder,
-              total: newOrder.total !== undefined ? newOrder.total : existing.total,
-              subtotal: newOrder.subtotal !== undefined ? newOrder.subtotal : existing.subtotal,
-              discount: newOrder.discount !== undefined ? newOrder.discount : existing.discount,
-              items: (newOrder.items && newOrder.items.length > 0 && (newOrder.items[0] as any)?.unitPrice !== undefined)
-                ? newOrder.items
-                : existing.items,
-            };
-            const copy = [...prev];
-            copy[existingIndex] = merged;
-            return copy;
-          }
-          return [newOrder, ...prev];
+    if (!isVercelWithoutWs) {
+      try {
+        const token = getAuthToken();
+        socket = socketIOClient(BACKEND_URL, {
+          auth: { token },
+          reconnectionAttempts: 5,
+          timeout: 3000,
+          transports: ['websocket', 'polling'],
         });
 
-        // Si c'est une commande sur place, basculer la table en OCCUPIED
-        if (newOrder.orderType === 'DINE_IN' && newOrder.tableNumber) {
-          const tNum = String(newOrder.tableNumber).trim().padStart(2, '0');
+        socket.on('connect', () => {
+          setIsOnline(true);
+          socket?.emit('join_kitchen', { token });
+          socket?.emit('join_admin', { token });
+        });
+
+        const cleanKey = (id: string) => String(id).replace(/^[#\s]*TF-/i, '').trim();
+
+        const handleNewOrder = (newOrder: Order) => {
+          setOrders(prev => {
+            const existingIndex = prev.findIndex(
+              o => o.id === newOrder.id || cleanKey(o.id) === cleanKey(newOrder.id)
+            );
+            if (existingIndex >= 0) {
+              const existing = prev[existingIndex];
+              const merged: Order = {
+                ...existing,
+                ...newOrder,
+                total: newOrder.total !== undefined ? newOrder.total : existing.total,
+                subtotal: newOrder.subtotal !== undefined ? newOrder.subtotal : existing.subtotal,
+                discount: newOrder.discount !== undefined ? newOrder.discount : existing.discount,
+                items: (newOrder.items && newOrder.items.length > 0 && (newOrder.items[0] as any)?.unitPrice !== undefined)
+                  ? newOrder.items
+                  : existing.items,
+              };
+              const copy = [...prev];
+              copy[existingIndex] = merged;
+              return copy;
+            }
+            return [newOrder, ...prev];
+          });
+
+          // Si c'est une commande sur place, basculer la table en OCCUPIED
+          if (newOrder.orderType === 'DINE_IN' && newOrder.tableNumber) {
+            const tNum = String(newOrder.tableNumber).trim().padStart(2, '0');
+            setTables(prev =>
+              prev.map(t =>
+                t.number === tNum
+                  ? {
+                      ...t,
+                      status: 'OCCUPIED',
+                      currentOrderId: newOrder.id,
+                      totalSpentToday: (t.totalSpentToday || 0) + (newOrder.total || 0),
+                    }
+                  : t
+              )
+            );
+          }
+
+          setNotification({
+            id: newOrder.id,
+            title: `🔔 Nouvelle commande #${newOrder.id}`,
+            subtitle: `${newOrder.customerName} • ${newOrder.orderType === 'DINE_IN' ? `Table ${newOrder.tableNumber}` : 'À emporter / Livraison'}`,
+            amount: newOrder.total || 0,
+          });
+          if (isSoundEnabled) playOrderChime();
+        };
+
+        const handleOrderUpdated = (updated: Order) => {
+          setOrders(prev =>
+            prev.map(o => {
+              if (o.id !== updated.id && cleanKey(o.id) !== cleanKey(updated.id)) return o;
+              return {
+                ...o,
+                ...updated,
+                total: updated.total !== undefined ? updated.total : o.total,
+                subtotal: updated.subtotal !== undefined ? updated.subtotal : o.subtotal,
+                discount: updated.discount !== undefined ? updated.discount : o.discount,
+                items: (updated.items && updated.items.length > 0 && (updated.items[0] as any)?.unitPrice !== undefined)
+                  ? updated.items
+                  : o.items,
+              };
+            })
+          );
+          if (updated.tableNumber && (updated.status === 'SERVED' || updated.status === 'CANCELLED')) {
+            const tNum = String(updated.tableNumber).trim().padStart(2, '0');
+            setTables(prev =>
+              prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
+            );
+          }
+        };
+
+        // Écoute des événements de création de commande
+        socket.on('order:created', handleNewOrder);
+        socket.on('new_order', handleNewOrder);
+        socket.on('kitchen_new_order', handleNewOrder);
+
+        // Écoute des événements de mise à jour de statut & cuisine
+        socket.on('order:updated', handleOrderUpdated);
+        socket.on('order_status_updated', handleOrderUpdated);
+        socket.on('kitchen_order_updated', handleOrderUpdated);
+
+        // Écoute des paiements confirmés
+        socket.on('payment:confirmed', (payload: any) => {
+          if (payload?.orderId) {
+            const methodLabel = payload.method === 'OM' ? 'Orange Money' : 'Wave';
+            const tag = `[Payé via ${methodLabel}]`;
+            const cleanTarget = cleanKey(payload.orderId);
+
+            setOrders(prev =>
+              prev.map(o => {
+                const cleanCurr = cleanKey(o.id);
+                if (o.id === payload.orderId || cleanCurr === cleanTarget) {
+                  const currNotes = o.notes || '';
+                  const updatedNotes = currNotes.includes(tag)
+                    ? currNotes
+                    : currNotes ? `${currNotes} • ${tag}` : tag;
+                  return { ...o, notes: updatedNotes };
+                }
+                return o;
+              })
+            );
+
+            if (isSoundEnabled) playOrderChime();
+            setNotification({
+              id: String(payload.orderId),
+              title: `💳 Paiement ${methodLabel} reçu !`,
+              subtitle: `Commande #${payload.orderId} réglée avec succès`,
+              amount: payload.amount || 0,
+            });
+          }
+        });
+
+        socket.on('sale:created', (salePayload: any) => {
+          if (salePayload?.orderId) {
+            setOrders(prev =>
+              prev.map(o => (o.id === salePayload.orderId ? { ...o, status: 'SERVED' } : o))
+            );
+          }
+        });
+
+        socket.on('table_status_updated', (updatedTable: any) => {
           setTables(prev =>
             prev.map(t =>
-              t.number === tNum
-                ? {
-                    ...t,
-                    status: 'OCCUPIED',
-                    currentOrderId: newOrder.id,
-                    totalSpentToday: (t.totalSpentToday || 0) + (newOrder.total || 0),
-                  }
+              t.id === updatedTable.id || t.number === updatedTable.number
+                ? { ...t, ...updatedTable }
                 : t
             )
           );
-        }
-
-        setNotification({
-          id: newOrder.id,
-          title: `🔔 Nouvelle commande #${newOrder.id}`,
-          subtitle: `${newOrder.customerName} • ${newOrder.orderType === 'DINE_IN' ? `Table ${newOrder.tableNumber}` : 'À emporter / Livraison'}`,
-          amount: newOrder.total || 0,
         });
-        if (isSoundEnabled) playOrderChime();
-      };
 
-      const handleOrderUpdated = (updated: Order) => {
-        setOrders(prev =>
-          prev.map(o => {
-            if (o.id !== updated.id) return o;
-            return {
-              ...o,
-              ...updated,
-              total: updated.total !== undefined ? updated.total : o.total,
-              subtotal: updated.subtotal !== undefined ? updated.subtotal : o.subtotal,
-              discount: updated.discount !== undefined ? updated.discount : o.discount,
-              items: (updated.items && updated.items.length > 0 && (updated.items[0] as any)?.unitPrice !== undefined)
-                ? updated.items
-                : o.items,
-            };
-          })
-        );
-        if (updated.tableNumber && (updated.status === 'SERVED' || updated.status === 'CANCELLED')) {
-          const tNum = String(updated.tableNumber).trim().padStart(2, '0');
-          setTables(prev =>
-            prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
-          );
-        }
-      };
+        socket.on('daily_menu_updated', (payload: any) => {
+          if (payload?.dayOfWeek !== undefined && payload?.updated) {
+            setWeeklySchedule(prev =>
+              prev.map(item => (item.dayOfWeek === payload.dayOfWeek ? { ...item, ...payload.updated } : item))
+            );
+          }
+        });
 
-      // Écoute des événements de création de commande
-      socket.on('order:created', handleNewOrder);
-      socket.on('new_order', handleNewOrder);
-      socket.on('kitchen_new_order', handleNewOrder);
-
-      // Écoute des événements de mise à jour de statut
-      socket.on('order:updated', handleOrderUpdated);
-      socket.on('order_status_updated', handleOrderUpdated);
-      socket.on('sale:created', (salePayload: any) => {
-        // Déclencher un rechargement des commandes pour synchroniser l'état servi et la vente
-        if (salePayload?.orderId) {
-          setOrders(prev =>
-            prev.map(o => (o.id === salePayload.orderId ? { ...o, status: 'SERVED' } : o))
-          );
-        }
-      });
-
-      socket.on('table_status_updated', (updatedTable: any) => {
-        setTables(prev =>
-          prev.map(t =>
-            t.id === updatedTable.id || t.number === updatedTable.number
-              ? { ...t, ...updatedTable }
-              : t
-          )
-        );
-      });
-
-      socket.on('daily_menu_updated', (payload: any) => {
-        if (payload?.dayOfWeek !== undefined && payload?.updated) {
-          setWeeklySchedule(prev =>
-            prev.map(item => (item.dayOfWeek === payload.dayOfWeek ? { ...item, ...payload.updated } : item))
-          );
-        }
-      });
-
-      socket.on('disconnect', () => {
-        setIsOnline(false);
-      });
-    } catch (e) {
-      // socket fallback
+        socket.on('disconnect', () => {
+          setIsOnline(false);
+        });
+      } catch (e) {
+        // socket fallback
+      }
     }
 
     return () => {
@@ -446,14 +483,123 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [isSoundEnabled]);
 
-  // Synchronisation automatique d'arrière-plan multi-appareils (Cloud Sync Polling)
-  // Permet à la Cuisine et à l'Admin de recevoir les commandes à la seconde près même sur Vercel/4G
+  // 2. Synchronisation instantanée multi-onglets / même appareil (BroadcastChannel & Storage 0ms)
+  useEffect(() => {
+    const cleanKey = (id: string) => String(id).replace(/^[#\s]*TF-/i, '').trim();
+
+    const handleSyncMessage = (data: any) => {
+      if (!data || !data.type) return;
+
+      if (data.type === 'NEW_ORDER' && data.order) {
+        const newOrder: Order = data.order;
+        setOrders(prev => {
+          const exists = prev.some(
+            o => o.id === newOrder.id || cleanKey(o.id) === cleanKey(newOrder.id)
+          );
+          if (exists) return prev;
+
+          if (isSoundEnabled) playOrderChime();
+          setNotification({
+            id: newOrder.id,
+            title: `🔔 Nouvelle commande #${newOrder.id}`,
+            subtitle: `${newOrder.customerName} • ${newOrder.orderType === 'DINE_IN' ? `Table ${newOrder.tableNumber}` : 'À emporter / Livraison'}`,
+            amount: newOrder.total || 0,
+          });
+
+          if (newOrder.orderType === 'DINE_IN' && newOrder.tableNumber) {
+            const tNum = String(newOrder.tableNumber).trim().padStart(2, '0');
+            setTables(prevTables =>
+              prevTables.map(t =>
+                t.number === tNum
+                  ? {
+                      ...t,
+                      status: 'OCCUPIED',
+                      currentOrderId: newOrder.id,
+                      totalSpentToday: (t.totalSpentToday || 0) + (newOrder.total || 0),
+                    }
+                  : t
+              )
+            );
+          }
+
+          return [newOrder, ...prev];
+        });
+      }
+
+      if (data.type === 'PAYMENT_CONFIRMED' && data.orderId) {
+        const cleanTargetId = cleanKey(data.orderId);
+        const methodLabel = data.method === 'OM' ? 'Orange Money' : 'Wave';
+        const tag = `[Payé via ${methodLabel}]`;
+
+        setOrders(prev =>
+          prev.map(o => {
+            if (o.id === data.orderId || cleanKey(o.id) === cleanTargetId) {
+              const currentNotes = o.notes || '';
+              const updatedNotes = currentNotes.includes(tag)
+                ? currentNotes
+                : currentNotes ? `${currentNotes} • ${tag}` : tag;
+              return {
+                ...o,
+                notes: updatedNotes,
+                ...(data.order || {}),
+              };
+            }
+            return o;
+          })
+        );
+
+        if (isSoundEnabled) playOrderChime();
+        setNotification({
+          id: String(data.orderId),
+          title: `💳 Paiement ${methodLabel} reçu !`,
+          subtitle: `Commande #${data.orderId} réglée avec succès`,
+          amount: data.amount || 0,
+        });
+      }
+
+      if (data.type === 'ORDER_UPDATED' && data.order) {
+        const updated: Order = data.order;
+        setOrders(prev =>
+          prev.map(o => (o.id === updated.id || cleanKey(o.id) === cleanKey(updated.id) ? { ...o, ...updated } : o))
+        );
+      }
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('teranga_orders_sync');
+        bc.onmessage = event => {
+          handleSyncMessage(event.data);
+        };
+      }
+    } catch {}
+
+    const handleStorageEvent = (event: StorageEvent) => {
+      if (event.key === 'teranga_sync_event' && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue);
+          handleSyncMessage(parsed);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('storage', handleStorageEvent);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorageEvent);
+    };
+  }, [isSoundEnabled]);
+
+  // 3. Moteur de synchronisation active haute fréquence (Polling résilient 2.5s pour Vercel / Réseau)
   useEffect(() => {
     let isPolling = false;
+    const cleanKey = (id: string) => String(id).replace(/^[#\s]*TF-/i, '').trim();
 
     const syncRemoteOrders = async () => {
       const token = getAuthToken();
-      if (!token || isPolling) return;
+      if (isPolling) return;
       isPolling = true;
 
       try {
@@ -468,19 +614,22 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         } catch {}
 
-        const res = await fetch(ordersUrl, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => null);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(ordersUrl, { headers }).catch(() => null);
 
         if (res && res.ok) {
           const data = await res.json().catch(() => null);
           if (data && Array.isArray(data.orders)) {
             setOrders(prev => {
-              const currentIds = new Set(prev.map(o => o.id));
-              const newIncomingOrders = data.orders.filter((o: Order) => !currentIds.has(o.id));
+              const currentIds = new Set(prev.flatMap(o => [String(o.id), cleanKey(o.id)]));
+              const newIncomingOrders = data.orders.filter(
+                (o: Order) => !currentIds.has(String(o.id)) && !currentIds.has(cleanKey(o.id))
+              );
 
               if (newIncomingOrders.length > 0) {
-                // Alerte sonore pour les nouvelles commandes en attente
+                // Alerte sonore pour les nouvelles commandes
                 const hasPending = newIncomingOrders.some((o: Order) => o.status === 'PENDING');
                 if (hasPending && isSoundEnabled) {
                   playOrderChime();
@@ -488,9 +637,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
                 // Notification visuelle
                 const latest = newIncomingOrders[0];
+                const isPaidWave = latest.notes?.includes('Wave');
+                const isPaidOM = latest.notes?.includes('Orange Money');
+                const paySuffix = isPaidWave ? ' [Wave ✓]' : isPaidOM ? ' [OM ✓]' : '';
+
                 setNotification({
                   id: latest.id,
-                  title: `🔔 Nouvelle commande #${latest.id}`,
+                  title: `🔔 Nouvelle commande #${latest.id}${paySuffix}`,
                   subtitle: `${latest.customerName} • ${latest.orderType === 'DINE_IN' ? `Table ${latest.tableNumber}` : 'À emporter / Livraison'}`,
                   amount: latest.total || 0,
                 });
@@ -515,14 +668,43 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 return [...newIncomingOrders, ...prev];
               }
 
-              // Synchroniser les statuts modifiés par d'autres collègues en cuisine ou caisse
-              const incomingMap = new Map<string, Order>(data.orders.map((o: Order) => [o.id, o]));
+              // Synchroniser les statuts et les paiements Wave modifiés
+              const incomingMap = new Map<string, Order>();
+              data.orders.forEach((o: Order) => {
+                incomingMap.set(String(o.id), o);
+                const ck = cleanKey(o.id);
+                if (ck) incomingMap.set(ck, o);
+              });
+
               let hasChanges = false;
               const updated = prev.map(o => {
-                const inc = incomingMap.get(o.id);
-                if (inc && inc.status !== o.status) {
+                const inc = incomingMap.get(String(o.id)) || incomingMap.get(cleanKey(o.id));
+                if (
+                  inc &&
+                  (inc.status !== o.status ||
+                    inc.notes !== o.notes ||
+                    (inc.statusHistory?.length || 0) !== (o.statusHistory?.length || 0))
+                ) {
                   hasChanges = true;
-                  return { ...o, status: inc.status, statusHistory: inc.statusHistory || o.statusHistory };
+                  // Si un paiement Wave ou OM vient d'être tagué, notifier
+                  if (
+                    inc.notes?.includes('Payé via') &&
+                    !o.notes?.includes('Payé via')
+                  ) {
+                    if (isSoundEnabled) playOrderChime();
+                    setNotification({
+                      id: inc.id,
+                      title: `💳 Paiement confirmé pour la commande #${inc.id}`,
+                      subtitle: `${inc.customerName} • ${inc.notes}`,
+                      amount: inc.total || 0,
+                    });
+                  }
+                  return {
+                    ...o,
+                    ...inc,
+                    total: inc.total !== undefined ? inc.total : o.total,
+                    subtotal: inc.subtotal !== undefined ? inc.subtotal : o.subtotal,
+                  };
                 }
                 return o;
               });
@@ -532,15 +714,30 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         }
       } catch {
-        // En cas d'indisponibilité momentanée du réseau
+        // Réseau indisponible momentanément
       } finally {
         isPolling = false;
       }
     };
 
-    // Vérification toutes les 3.5 secondes pour une réactivité instantanée
-    const interval = setInterval(syncRemoteOrders, 3500);
-    return () => clearInterval(interval);
+    // Polling toutes les 2.5 secondes pour réactivité instantanée en production
+    const interval = setInterval(syncRemoteOrders, 2500);
+
+    // Déclenchement immédiat au retour sur l'onglet ou au déverrouillage de la tablette
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncRemoteOrders();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
   }, [isSoundEnabled]);
 
   // Sauvegarde permanente dans le localStorage
@@ -810,6 +1007,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       amount: createdOrder.total,
     });
 
+    // Diffusion instantanée multi-onglets / même appareil (0ms)
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('teranga_orders_sync');
+        bc.postMessage({ type: 'NEW_ORDER', order: createdOrder, at: Date.now() });
+        bc.close();
+      }
+    } catch {}
+    try {
+      localStorage.setItem(
+        'teranga_sync_event',
+        JSON.stringify({ type: 'NEW_ORDER', order: createdOrder, at: Date.now() })
+      );
+    } catch {}
+
     clearCart();
     return createdOrder;
   };
@@ -843,6 +1055,22 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
             );
           }
+
+          // Diffusion BroadcastChannel
+          try {
+            if (typeof BroadcastChannel !== 'undefined') {
+              const bc = new BroadcastChannel('teranga_orders_sync');
+              bc.postMessage({ type: 'ORDER_UPDATED', order: data.order, at: Date.now() });
+              bc.close();
+            }
+          } catch {}
+          try {
+            localStorage.setItem(
+              'teranga_sync_event',
+              JSON.stringify({ type: 'ORDER_UPDATED', order: data.order, at: Date.now() })
+            );
+          } catch {}
+
           return;
         }
       }
@@ -851,11 +1079,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     // 2. Mettre à jour l'état local en cas de problème de réseau
+    let fallbackUpdated: Order | null = null;
     setOrders(prev =>
       prev.map(o => {
         if (isTarget(o)) {
           const history = o.statusHistory || [];
-          return {
+          fallbackUpdated = {
             ...o,
             status,
             statusHistory: [
@@ -863,6 +1092,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               { status, changedAt: new Date().toISOString(), note: note || `Statut passé à ${status}` },
             ],
           };
+          return fallbackUpdated;
         }
         return o;
       })
@@ -875,6 +1105,82 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setTables(prev =>
         prev.map(t => (t.number === tNum ? { ...t, status: 'FREE', currentOrderId: undefined } : t))
       );
+    }
+
+    if (fallbackUpdated) {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('teranga_orders_sync');
+          bc.postMessage({ type: 'ORDER_UPDATED', order: fallbackUpdated, at: Date.now() });
+          bc.close();
+        }
+      } catch {}
+    }
+  };
+
+  const confirmOrderPayment = async (
+    orderId: string,
+    paymentMethod: 'WAVE' | 'OM',
+    amount?: number
+  ): Promise<void> => {
+    const cleanTargetId = String(orderId).replace(/^[#\s]*TF-/i, '').trim();
+    const methodLabel = paymentMethod === 'OM' ? 'Orange Money' : 'Wave';
+    const tag = `[Payé via ${methodLabel}]`;
+
+    // 1. Mise à jour immédiate optimiste locale
+    setOrders(prev =>
+      prev.map(o => {
+        const cleanCurrId = String(o.id).replace(/^[#\s]*TF-/i, '').trim();
+        if (o.id === orderId || cleanCurrId === cleanTargetId) {
+          const currentNotes = o.notes || '';
+          const updatedNotes = currentNotes.includes(tag)
+            ? currentNotes
+            : currentNotes ? `${currentNotes} • ${tag}` : tag;
+          return {
+            ...o,
+            notes: updatedNotes,
+            statusHistory: [
+              ...(o.statusHistory || []),
+              {
+                status: o.status,
+                changedAt: new Date().toISOString(),
+                note: `Paiement ${methodLabel} validé par le client (${amount ? `${amount} FCFA` : 'validé'})`,
+              },
+            ],
+          };
+        }
+        return o;
+      })
+    );
+
+    // 2. Diffusion BroadcastChannel 0ms pour la cuisine et les autres écrans
+    const syncPayload = {
+      type: 'PAYMENT_CONFIRMED',
+      orderId,
+      method: paymentMethod,
+      amount,
+      at: Date.now(),
+    };
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('teranga_orders_sync');
+        bc.postMessage(syncPayload);
+        bc.close();
+      }
+    } catch {}
+    try {
+      localStorage.setItem('teranga_sync_event', JSON.stringify(syncPayload));
+    } catch {}
+
+    // 3. Notification vers l'API backend pour persister en BDD PostgreSQL / MariaDB
+    try {
+      await fetch(`${BACKEND_URL}/api/orders/${cleanTargetId || orderId}/payment-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethod, amount }),
+      });
+    } catch (e) {
+      console.warn('Erreur confirmation paiement backend :', e);
     }
   };
 
@@ -1148,6 +1454,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         removeFromCart,
         clearCart,
         createOrder,
+        confirmOrderPayment,
         updateOrderStatus,
         updateTableStatus,
         addTable,

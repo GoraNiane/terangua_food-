@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Smartphone, Zap, ShieldCheck } from 'lucide-react';
 import { Order, Restaurant } from '../../types';
 import { formatFCFA } from '../../services/whatsappService';
+import { useRestaurantStore } from '../../store/restaurantStore';
 import { PaymentModal, WaveLogo, OrangeMoneyLogo, getWavePaymentUrl } from './PaymentModal';
 
 interface PaymentActionButtonsProps {
@@ -18,6 +19,13 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
   showTitle = true,
 }) => {
   const [activeModal, setActiveModal] = useState<'wave' | 'om' | null>(null);
+  const { confirmOrderPayment } = useRestaurantStore();
+
+  const handleWaveClick = () => {
+    if (confirmOrderPayment) {
+      confirmOrderPayment(order.id, 'WAVE', order.total);
+    }
+  };
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -39,6 +47,7 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
         {/* Bouton Wave — Navigation directe avec pay.wave.com et montant prescrit */}
         <a
           href={getWavePaymentUrl(order.total)}
+          onClick={handleWaveClick}
           target="_blank"
           rel="noopener noreferrer"
           className="group relative overflow-hidden flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#1DC3F2] hover:bg-[#16add7] text-white shadow-soft transition-all duration-200 active:scale-98 cursor-pointer border border-[#18b5e4]"

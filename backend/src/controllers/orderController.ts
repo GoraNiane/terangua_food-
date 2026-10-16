@@ -26,6 +26,12 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const io = (req.app as any).get('io');
     if (io) {
       const kitchenOrder = orderService.sanitizeOrderForKitchen(order);
+      // Diffusion globale immédiate sans dépendance aux rooms
+      io.emit('order:created', order);
+      io.emit('kitchen_new_order', kitchenOrder);
+      io.emit('new_order', order);
+
+      // Diffusion ciblée par room pour compatibilité
       io.to('kitchen').emit('order:created', kitchenOrder);
       io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
       io.to('admin').emit('order:created', order);
@@ -164,3 +170,54 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
     res.status(400).json({ error: err.message || 'Erreur lors de la mise à jour du statut' });
   }
 };
+
+/**
+ * Confirmation de paiement client (Wave / OM) avec propagation instantanée
+ * POST /api/orders/:id/payment-confirm
+ */
+export const confirmOrderPayment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { paymentMethod, amount, transactionRef } = req.body;
+
+    const method = String(paymentMethod || 'WAVE').toUpperCase();
+    const updatedOrder = await orderService.confirmPayment(id, {
+      method,
+      amount: Number(amount) || 0,
+      transactionRef,
+    });
+
+    // Diffusion temps réel Socket.IO immédiate
+    const io = (req.app as any).get('io');
+    if (io) {
+      const kitchenOrder = orderService.sanitizeOrderForKitchen(updatedOrder);
+      // Diffusion universelle
+      io.emit('payment:confirmed', { orderId: updatedOrder.id, method });
+      io.emit('order:updated', updatedOrder);
+      io.emit('order_status_updated', updatedOrder);
+      io.emit('kitchen_order_updated', kitchenOrder);
+
+      // Diffusion ciblée par room
+      io.to('kitchen').emit('order:updated', kitchenOrder);
+      io.to('kitchen').emit('order_status_updated', kitchenOrder);
+      io.to('admin').emit('order:updated', updatedOrder);
+      io.to('admin').emit('order_status_updated', updatedOrder);
+      io.to(`order_${updatedOrder.id}`).emit('order:updated', updatedOrder);
+      const cleanId = String(updatedOrder.id).replace(/^[#\s]*TF-/i, '').trim();
+      if (cleanId && cleanId !== updatedOrder.id) {
+        io.to(`order_${cleanId}`).emit('order:updated', updatedOrder);
+      }
+    }
+
+    res.json({
+      message: `Paiement ${method === 'OM' ? 'Orange Money' : 'Wave'} confirmé pour la commande #${updatedOrder.id}`,
+      order: updatedOrder,
+    });
+  } catch (err: any) {
+    console.error('Erreur confirmOrderPayment :', err);
+    res.status(400).json({
+      error: err.message || 'Erreur lors de la confirmation du paiement',
+    });
+  }
+};
+

@@ -4,6 +4,7 @@ import confetti from 'canvas-confetti';
 import { Order, Restaurant } from '../../types';
 import { formatFCFA } from '../../services/whatsappService';
 import { useLanguage } from '../../services/i18n';
+import { useRestaurantStore } from '../../store/restaurantStore';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -75,6 +76,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   restaurant,
 }) => {
   const { lang } = useLanguage();
+  const { confirmOrderPayment } = useRestaurantStore();
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedRef, setCopiedRef] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
@@ -101,6 +103,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   const handleOpenApp = () => {
+    if (confirmOrderPayment) {
+      confirmOrderPayment(order.id, isWave ? 'WAVE' : 'OM', order.total);
+    }
     if (isWave) {
       // Wave official merchant payment link with pre-filled amount
       const waveUrl = getWavePaymentUrl(order.total);
@@ -112,6 +117,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   const handleConfirmPaid = () => {
+    if (confirmOrderPayment) {
+      confirmOrderPayment(order.id, isWave ? 'WAVE' : 'OM', order.total);
+    }
     try {
       confetti({
         particleCount: 50,
@@ -281,6 +289,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             {isWave ? (
               <a
                 href={getWavePaymentUrl(order.total)}
+                onClick={handleOpenApp}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full py-3.5 px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 bg-[#1DC3F2] hover:bg-[#15a9d3]"

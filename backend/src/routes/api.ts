@@ -55,8 +55,10 @@ router.get('/qrcodes', tableCtrl.getQRCodes);
 // --- ESPACE CUISINE DÉDIÉ (SANS PRIX NI DONNÉES FINANCIÈRES) ---
 router.get('/orders/kitchen', authenticateToken, requireRole(['ADMIN', 'STAFF', 'KITCHEN']), orderCtrl.getKitchenOrders);
 
-// --- COMMANDES ADMINISTRATIVES (ADMIN & STAFF UNIQUEMENT — 403 POUR KITCHEN) ---
+// --- COMMANDES ADMINISTRATIVES & PAIEMENTS ---
 router.post('/orders', orderCtrl.createOrder); // Commande publique client
+router.post('/orders/:id/payment-confirm', orderCtrl.confirmOrderPayment); // Confirmation paiement client Wave / OM
+router.post('/orders/:id/pay', orderCtrl.confirmOrderPayment); // Alias paiement client
 router.get('/orders', authenticateToken, requireRole(['ADMIN', 'STAFF']), orderCtrl.getOrders);
 router.get('/orders/:id', orderCtrl.getOrderById); // Suivi de commande client
 router.patch('/orders/:id/status', authenticateToken, requireRole(['ADMIN', 'STAFF', 'KITCHEN']), orderCtrl.updateOrderStatus);

@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 9.0.0 (Smart QR Code Table Auto-Detection & Direct Occupant Order Flow)
+// Version: 10.0.0 (Instant Wave Payment & Realtime Kitchen Sync)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v9';
+const CACHE_NAME = 'teranga-pwa-v10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
