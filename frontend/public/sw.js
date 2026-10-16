@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 8.0.0 (Wave & Orange Money Direct Mobile Payment Buttons)
+// Version: 9.0.0 (Smart QR Code Table Auto-Detection & Direct Occupant Order Flow)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v8';
+const CACHE_NAME = 'teranga-pwa-v9';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

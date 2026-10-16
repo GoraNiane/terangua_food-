@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle2, Utensils, ShoppingBag, MapPin, Phone, User, MessageSquare, AlertCircle } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { OrderType } from '../../types';
 import { formatFCFA, generateWhatsAppUrl } from '../../services/whatsappService';
@@ -10,6 +10,7 @@ export const ClientCheckoutPage: React.FC = () => {
   const { cart, cartTotal, restaurant, activeTable, createOrder } = useRestaurantStore();
   const { t, lang } = useLanguage();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [orderType, setOrderType] = useState<OrderType>(activeTable ? 'DINE_IN' : 'DINE_IN');
   const [tableNumber, setTableNumber] = useState(activeTable || '');
@@ -20,6 +21,16 @@ export const ClientCheckoutPage: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Synchronisation automatique de la table scannée
+  useEffect(() => {
+    const rawTable = searchParams.get('table') || activeTable;
+    if (rawTable) {
+      const formatted = String(rawTable).trim().padStart(2, '0');
+      setOrderType('DINE_IN');
+      setTableNumber(formatted);
+    }
+  }, [searchParams, activeTable]);
 
   // Delivery fee
   const deliveryFee = orderType === 'DELIVERY' ? 1500 : 0;

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, QrCode, Utensils, Send, Star, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useRestaurantStore } from '../../store/restaurantStore';
 import { ClientHeader } from '../../components/client/ClientHeader';
 import { BottomNav } from '../../components/client/BottomNav';
@@ -13,10 +13,22 @@ import { useLanguage, getRestaurantSlogan } from '../../services/i18n';
 import { Product } from '../../types';
 
 export const ClientHomePage: React.FC = () => {
-  const { restaurant, products } = useRestaurantStore();
+  const { restaurant, products, setActiveTable } = useRestaurantStore();
   const { t, lang } = useLanguage();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Redirection automatique vers le menu si un QR code a scanné l'accueil avec ?table=...
+  useEffect(() => {
+    const rawTable = searchParams.get('table');
+    if (rawTable) {
+      const formatted = String(rawTable).trim().padStart(2, '0');
+      setActiveTable(formatted);
+      navigate(`/menu?table=${formatted}`, { replace: true });
+    }
+  }, [searchParams, setActiveTable, navigate]);
 
   const featuredProducts = products.filter(p => p.isFeatured).slice(0, 6);
 

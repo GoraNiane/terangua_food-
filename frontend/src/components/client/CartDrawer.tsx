@@ -11,7 +11,7 @@ interface CartDrawerProps {
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
-  const { cart, updateCartQuantity, removeFromCart, clearCart, cartTotal } =
+  const { cart, updateCartQuantity, removeFromCart, clearCart, cartTotal, activeTable } =
     useRestaurantStore();
   const { t, lang } = useLanguage();
   const navigate = useNavigate();
@@ -178,6 +178,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                   </span>
                 </div>
               </div>
+
+              {activeTable && (
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#FAFAFA] border border-[#EAEAEA] text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-bold text-[#0A0A0A]">Table {activeTable}</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                    Sur place
+                  </span>
+                </div>
+              )}
 
               <button
                 onClick={handleCheckoutClick}

@@ -1,15 +1,26 @@
 import { API_BASE_URL } from '../config/api';
 
 const QR_HOST_KEY = 'teranga_qr_base_host';
+export const PRODUCTION_SITE_URL = 'https://terangua-food.vercel.app';
 
 /**
  * Récupère l'URL de base pour la génération des QR codes (persistée dans le localStorage)
  */
 export const getStoredQrHost = (): string => {
-  if (typeof window === 'undefined') return 'http://localhost:5173';
+  if (typeof window === 'undefined') return PRODUCTION_SITE_URL;
   const saved = localStorage.getItem(QR_HOST_KEY);
   if (saved && saved.trim()) return saved.trim();
-  return window.location.origin;
+
+  // Si on est déjà sur le site Vercel ou un domaine de production, utiliser window.location.origin
+  if (
+    window.location.origin.includes('vercel.app') ||
+    (!window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1'))
+  ) {
+    return window.location.origin;
+  }
+
+  // Si on est en développement local, par défaut les QR codes pointent vers l'URL officielle de production pour que le scan smartphone fonctionne immédiatement !
+  return PRODUCTION_SITE_URL;
 };
 
 /**

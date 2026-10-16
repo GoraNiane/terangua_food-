@@ -18,7 +18,7 @@ import { useRestaurantStore } from '../../store/restaurantStore';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminSidebar } from '../../components/admin/AdminSidebar';
 import { TableStandMockup } from '../../components/admin/TableStandMockup';
-import { getStoredQrHost, setStoredQrHost, fetchLanIpHost, generateTableQrUrl } from '../../utils/qrHelper';
+import { getStoredQrHost, setStoredQrHost, fetchLanIpHost, generateTableQrUrl, PRODUCTION_SITE_URL } from '../../utils/qrHelper';
 
 export const AdminQRCodePage: React.FC = () => {
   const { restaurant } = useRestaurantStore();
@@ -41,12 +41,6 @@ export const AdminQRCodePage: React.FC = () => {
     fetchLanIpHost().then(detected => {
       if (isMounted && detected) {
         setLanHost(detected);
-        // Si l'utilisateur est sur localhost et n'a pas encore configuré d'hôte, suggérer l'IP LAN
-        const current = getStoredQrHost();
-        if (current.includes('localhost') || current.includes('127.0.0.1')) {
-          setBaseHost(detected);
-          setStoredQrHost(detected);
-        }
       }
       if (isMounted) setIsLoadingLan(false);
     });
@@ -208,6 +202,27 @@ export const AdminQRCodePage: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-1.5">
+                      {/* Option 1 : Production Vercel en direct (Recommandée pour smartphones) */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectHost(PRODUCTION_SITE_URL)}
+                        className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between border transition-all ${
+                          baseHost === PRODUCTION_SITE_URL
+                            ? 'bg-[#0A0A0A] text-white border-[#0A0A0A] shadow-xs'
+                            : 'bg-white text-[#444444] border-[#E5E5E5] hover:border-black'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Globe className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                          <span className="truncate">Production Vercel ({PRODUCTION_SITE_URL})</span>
+                        </div>
+                        {baseHost === PRODUCTION_SITE_URL ? (
+                          <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                        ) : (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">En ligne</span>
+                        )}
+                      </button>
+
                       {lanHost && (
                         <button
                           type="button"
