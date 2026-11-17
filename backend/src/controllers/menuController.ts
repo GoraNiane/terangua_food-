@@ -184,9 +184,35 @@ export const createProduct = async (req: AuthRequest, res: Response): Promise<vo
       options,
     } = req.body;
 
+    // Résolution intelligente et tolérante de la catégorie (supporte les IDs CUID et les slugs hérités ex: 'cat-senegal')
+    let resolvedCategoryId = categoryId;
+    if (resolvedCategoryId) {
+      const catExists = await prisma.category.findUnique({ where: { id: resolvedCategoryId } });
+      if (!catExists) {
+        const cleanSlug = String(resolvedCategoryId).replace(/^cat-/, '').toLowerCase();
+        const fallbackCat = await prisma.category.findFirst({
+          where: {
+            OR: [
+              { slug: resolvedCategoryId },
+              { slug: cleanSlug },
+              { slug: { contains: cleanSlug } },
+              { name: { contains: cleanSlug } },
+            ],
+          },
+        }) || (await prisma.category.findFirst({ where: { isActive: true } }));
+
+        if (fallbackCat) {
+          resolvedCategoryId = fallbackCat.id;
+        }
+      }
+    } else {
+      const firstCat = await prisma.category.findFirst({ where: { isActive: true } });
+      if (firstCat) resolvedCategoryId = firstCat.id;
+    }
+
     const product = await (prisma as any).product.create({
       data: {
-        categoryId,
+        categoryId: resolvedCategoryId,
         name,
         description,
         price: Number(price),
@@ -229,13 +255,33 @@ export const createProduct = async (req: AuthRequest, res: Response): Promise<vo
 export const updateProduct = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { ingredients, price, originalPrice, ...data } = req.body;
+    const { ingredients, price, originalPrice, categoryId, ...data } = req.body;
 
     const updateData: any = { ...data };
     if (price !== undefined) updateData.price = Number(price);
     if (originalPrice !== undefined) updateData.originalPrice = originalPrice ? Number(originalPrice) : null;
     if (ingredients !== undefined) {
       updateData.ingredients = Array.isArray(ingredients) ? JSON.stringify(ingredients) : JSON.stringify([ingredients]);
+    }
+
+    if (categoryId) {
+      let resolvedCatId = categoryId;
+      const catExists = await prisma.category.findUnique({ where: { id: categoryId } });
+      if (!catExists) {
+        const cleanSlug = String(categoryId).replace(/^cat-/, '').toLowerCase();
+        const fallback = await prisma.category.findFirst({
+          where: {
+            OR: [
+              { slug: categoryId },
+              { slug: cleanSlug },
+              { slug: { contains: cleanSlug } },
+              { name: { contains: cleanSlug } },
+            ],
+          },
+        });
+        if (fallback) resolvedCatId = fallback.id;
+      }
+      updateData.categoryId = resolvedCatId;
     }
 
     const product = await (prisma as any).product.update({
