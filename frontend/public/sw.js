@@ -1,9 +1,9 @@
 // ========================================================
 // TERANGA FOOD — SERVICE WORKER PWA LUXURY OFFLINE-READY
-// Version: 10.0.0 (Instant Wave Payment & Realtime Kitchen Sync)
+// Version: 11.0.0 (Instant TiDB Cloud Sync & Realtime Products)
 // ========================================================
 
-const CACHE_NAME = 'teranga-pwa-v10';
+const CACHE_NAME = 'teranga-pwa-v11';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

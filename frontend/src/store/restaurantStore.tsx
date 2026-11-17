@@ -1259,15 +1259,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addProduct = async (productData: Omit<Product, 'id'>) => {
+    const tempId = `prod-${Date.now()}`;
     const newProduct: Product = {
       ...productData,
-      id: `prod-${Date.now()}`,
+      id: tempId,
     };
     setProducts(prev => [newProduct, ...prev]);
 
     try {
       const token = localStorage.getItem('teranga_auth_token') || sessionStorage.getItem('teranga_auth_token');
-      await fetch(`${BACKEND_URL}/api/products`, {
+      const response = await fetch(`${BACKEND_URL}/api/products`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1275,6 +1276,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         },
         body: JSON.stringify(productData),
       });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.product?.id) {
+          setProducts(prev => prev.map(p => (p.id === tempId ? { ...p, id: data.product.id } : p)));
+        }
+      }
     } catch (e) {
       console.warn('Backend unavailable, product added locally', e);
     }
