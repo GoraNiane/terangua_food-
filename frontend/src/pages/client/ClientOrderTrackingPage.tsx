@@ -124,10 +124,13 @@ export const ClientOrderTrackingPage: React.FC = () => {
   // ✓ Commande reçue -> ✓ Commande acceptée -> ● En préparation -> ○ Prête -> ○ Servie
   const getStepIndex = (status: OrderStatus) => {
     switch (status) {
+      case 'PENDING_PAYMENT':
+        return 0; // En attente de paiement
+      case 'AWAITING_PAYMENT_VERIFICATION':
       case 'PENDING':
-        return 1; // Reçue
+        return 1; // Reçue / Déclarée
       case 'CONFIRMED':
-        return 2; // Acceptée
+        return 2; // Acceptée / Validée
       case 'PREPARING':
         return 3; // En préparation
       case 'READY':
@@ -250,9 +253,42 @@ export const ClientOrderTrackingPage: React.FC = () => {
               </p>
             </div>
           </div>
+        ) : order.status === 'AWAITING_PAYMENT_VERIFICATION' ? (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 text-purple-950 space-y-2 animate-fade-in shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full bg-purple-600 animate-ping shrink-0" />
+              <h2 className="font-sans font-black text-sm sm:text-base text-purple-950">
+                Paiement signalé — Vérification en cours
+              </h2>
+            </div>
+            <p className="text-xs text-purple-900 leading-relaxed">
+              Votre paiement a été signalé. Votre commande sera transmise à la cuisine après vérification et validation par le restaurant.
+            </p>
+          </div>
+        ) : order.status === 'PENDING_PAYMENT' ? (
+          <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 space-y-3 animate-fade-in shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <h2 className="font-sans font-black text-sm sm:text-base text-amber-950">
+                Règlement de votre commande en attente
+              </h2>
+            </div>
+            <p className="text-xs text-amber-900 leading-relaxed">
+              Veuillez effectuer votre paiement Wave ou Orange Money ci-dessous puis cliquer sur « J'ai effectué le paiement » pour lancer la préparation.
+            </p>
+            <PaymentActionButtons order={order} restaurant={restaurant} showTitle={false} />
+          </div>
         ) : order.status === 'CANCELLED' ? (
-          <div className="p-4 rounded-2xl bg-red-50 text-red-700 border border-red-200 text-xs font-semibold">
-            {t.cancelledBanner}
+          <div className="p-5 rounded-2xl bg-red-50 text-red-900 border border-red-200 text-xs font-semibold space-y-1.5 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span className="font-bold text-sm">Commande annulée</span>
+            </div>
+            <p className="text-red-700">
+              {order.payment?.rejectionReason
+                ? `Motif : ${order.payment.rejectionReason}`
+                : order.statusHistory?.find(h => h.status === 'CANCELLED')?.note || t.cancelledBanner}
+            </p>
           </div>
         ) : (
           <div className="p-4 rounded-2xl bg-white border border-[#EAEAEA] shadow-soft flex items-center gap-3 animate-fade-in">

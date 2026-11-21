@@ -15,6 +15,20 @@ export const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, size
       border: 'border-[#0A0A0A]',
       dot: 'bg-white animate-ping',
     },
+    PENDING_PAYMENT: {
+      label: 'Attente Paiement',
+      bg: 'bg-amber-50',
+      text: 'text-amber-800',
+      border: 'border-amber-300',
+      dot: 'bg-amber-500',
+    },
+    AWAITING_PAYMENT_VERIFICATION: {
+      label: 'Paiement à vérifier',
+      bg: 'bg-purple-50',
+      text: 'text-purple-800',
+      border: 'border-purple-300',
+      dot: 'bg-purple-600 animate-ping',
+    },
     CONFIRMED: {
       label: 'Acceptée',
       bg: 'bg-[#222222]',

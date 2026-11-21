@@ -74,6 +74,7 @@ interface RestaurantContextType extends StoreState {
     orderType: Order['orderType'];
     tableNumber?: string;
     deliveryAddress?: string;
+    paymentMethod?: 'WAVE' | 'OM' | 'CASH' | 'CARD';
     notes?: string;
     items: Order['items'];
     subtotal: number;
@@ -81,7 +82,20 @@ interface RestaurantContextType extends StoreState {
     deliveryFee: number;
     total: number;
   }) => Promise<Order>;
-  confirmOrderPayment: (orderId: string, paymentMethod: 'WAVE' | 'OM', amount?: number) => Promise<void>;
+  confirmOrderPayment: (
+    orderId: string,
+    paymentMethod: 'WAVE' | 'OM',
+    amount?: number,
+    transactionRef?: string
+  ) => Promise<void>;
+  declareOrderPayment: (
+    orderId: string,
+    paymentMethod: 'WAVE' | 'OM' | 'CASH' | 'CARD',
+    transactionRef?: string,
+    customerNote?: string
+  ) => Promise<Order>;
+  approveOrderPayment: (orderId: string, note?: string) => Promise<Order>;
+  rejectOrderPayment: (orderId: string, reason: string) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => Promise<void>;
   updateTableStatus: (tableNumber: string, status: TableStatus) => void;
   addTable: (tableData: { number: string; capacity: number; area?: string; status?: TableStatus }) => Promise<void>;
@@ -159,6 +173,9 @@ function getAuthToken(): string | null {
     return null;
   }
 }
+
+const cleanKey = (id?: string | null): string =>
+  id ? String(id).replace(/^[#\s]*TF-/i, '').trim() : '';
 
 export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initial = loadInitialData();
@@ -413,7 +430,108 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         socket.on('order_status_updated', handleOrderUpdated);
         socket.on('kitchen_order_updated', handleOrderUpdated);
 
-        // Écoute des paiements confirmés
+        // Écoute des paiements déclarés par les clients
+        socket.on('payment:declared', (payload: any) => {
+          if (payload?.orderId) {
+            const methodLabel = payload.method === 'OM' ? 'Orange Money' : 'Wave';
+            const cleanTarget = cleanKey(payload.orderId);
+
+            setOrders(prev =>
+              prev.map(o => {
+                const cleanCurr = cleanKey(o.id);
+                if (o.id === payload.orderId || cleanCurr === cleanTarget) {
+                  return {
+                    ...o,
+                    status: 'AWAITING_PAYMENT_VERIFICATION',
+                    payment: o.payment
+                      ? { ...o.payment, status: 'AWAITING_VERIFICATION', transactionRef: payload.transactionRef }
+                      : {
+                          id: `temp-${payload.orderId}`,
+                          orderId: o.id,
+                          amount: o.total,
+                          currency: 'FCFA',
+                          method: payload.method,
+                          status: 'AWAITING_VERIFICATION',
+                          transactionRef: payload.transactionRef,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        },
+                  };
+                }
+                return o;
+              })
+            );
+
+            if (isSoundEnabled) playOrderChime();
+            setNotification({
+              id: String(payload.orderId),
+              title: `🔔 Paiement ${methodLabel} à vérifier !`,
+              subtitle: `Commande #${payload.orderId} • ${payload.amount ? `${payload.amount} FCFA` : ''}${payload.transactionRef ? ` • Réf: ${payload.transactionRef}` : ''}`,
+              amount: payload.amount || 0,
+            });
+          }
+        });
+
+        // Écoute des paiements approuvés par le gérant
+        socket.on('payment:approved', (payload: any) => {
+          if (payload?.orderId) {
+            const cleanTarget = cleanKey(payload.orderId);
+
+            setOrders(prev =>
+              prev.map(o => {
+                const cleanCurr = cleanKey(o.id);
+                if (o.id === payload.orderId || cleanCurr === cleanTarget) {
+                  return {
+                    ...o,
+                    status: 'CONFIRMED',
+                    payment: o.payment ? { ...o.payment, status: 'PAID' } : undefined,
+                  };
+                }
+                return o;
+              })
+            );
+
+            if (isSoundEnabled) playOrderChime();
+            setNotification({
+              id: String(payload.orderId),
+              title: `✅ Paiement approuvé !`,
+              subtitle: `Commande #${payload.orderId} transmise en cuisine`,
+              amount: 0,
+            });
+          }
+        });
+
+        // Écoute des paiements rejetés par le gérant
+        socket.on('payment:rejected', (payload: any) => {
+          if (payload?.orderId) {
+            const cleanTarget = cleanKey(payload.orderId);
+
+            setOrders(prev =>
+              prev.map(o => {
+                const cleanCurr = cleanKey(o.id);
+                if (o.id === payload.orderId || cleanCurr === cleanTarget) {
+                  return {
+                    ...o,
+                    status: 'CANCELLED',
+                    payment: o.payment
+                      ? { ...o.payment, status: 'REJECTED', rejectionReason: payload.reason }
+                      : undefined,
+                  };
+                }
+                return o;
+              })
+            );
+
+            setNotification({
+              id: String(payload.orderId),
+              title: `❌ Paiement rejeté`,
+              subtitle: `Commande #${payload.orderId} • Motif : ${payload.reason || 'Non validé'}`,
+              amount: 0,
+            });
+          }
+        });
+
+        // Écoute des paiements confirmés (rétro-compatibilité)
         socket.on('payment:confirmed', (payload: any) => {
           if (payload?.orderId) {
             const methodLabel = payload.method === 'OM' ? 'Orange Money' : 'Wave';
@@ -433,14 +551,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 return o;
               })
             );
-
-            if (isSoundEnabled) playOrderChime();
-            setNotification({
-              id: String(payload.orderId),
-              title: `💳 Paiement ${methodLabel} reçu !`,
-              subtitle: `Commande #${payload.orderId} réglée avec succès`,
-              amount: payload.amount || 0,
-            });
           }
         });
 
@@ -481,6 +591,43 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => {
       if (socket) socket.disconnect();
     };
+  }, [isSoundEnabled]);
+
+  // 1.bis. Mécanisme de secours (Fallback Polling) pour Kitchen & Admin en cas de coupure WebSocket
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    const interval = setInterval(async () => {
+      try {
+        let ordersUrl = `${BACKEND_URL}/api/orders`;
+        const userStr = localStorage.getItem('teranga_auth_user') || sessionStorage.getItem('teranga_auth_user');
+        if (userStr) {
+          const u = JSON.parse(userStr);
+          if (u.role === 'KITCHEN') {
+            ordersUrl = `${BACKEND_URL}/api/orders/kitchen`;
+          }
+        }
+        const res = await fetch(ordersUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.orders)) {
+            setOrders(prev => {
+              if (prev.length > 0 && data.orders.length > prev.length) {
+                if (isSoundEnabled) playOrderChime();
+              }
+              return data.orders;
+            });
+          }
+        }
+      } catch {
+        // En cas de micro-coupure réseau temporaire, continuer silencieusement
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [isSoundEnabled]);
 
   // 2. Synchronisation instantanée multi-onglets / même appareil (BroadcastChannel & Storage 0ms)
@@ -1118,33 +1265,47 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
-  const confirmOrderPayment = async (
+  /**
+   * 1. Déclaration de paiement par le client (Wave / OM)
+   * RÈGLE ABSOLUE : Statut passe à AWAITING_PAYMENT_VERIFICATION. Jamais en cuisine.
+   */
+  const declareOrderPayment = async (
     orderId: string,
-    paymentMethod: 'WAVE' | 'OM',
-    amount?: number
-  ): Promise<void> => {
+    paymentMethod: 'WAVE' | 'OM' | 'CASH' | 'CARD',
+    transactionRef?: string,
+    customerNote?: string
+  ): Promise<Order> => {
     const cleanTargetId = String(orderId).replace(/^[#\s]*TF-/i, '').trim();
-    const methodLabel = paymentMethod === 'OM' ? 'Orange Money' : 'Wave';
-    const tag = `[Payé via ${methodLabel}]`;
+    const methodLabel = paymentMethod === 'OM' ? 'Orange Money' : paymentMethod === 'CASH' ? 'Espèces' : 'Wave';
 
-    // 1. Mise à jour immédiate optimiste locale
+    // 1. Mise à jour optimiste locale vers AWAITING_PAYMENT_VERIFICATION
     setOrders(prev =>
       prev.map(o => {
         const cleanCurrId = String(o.id).replace(/^[#\s]*TF-/i, '').trim();
         if (o.id === orderId || cleanCurrId === cleanTargetId) {
-          const currentNotes = o.notes || '';
-          const updatedNotes = currentNotes.includes(tag)
-            ? currentNotes
-            : currentNotes ? `${currentNotes} • ${tag}` : tag;
           return {
             ...o,
-            notes: updatedNotes,
+            status: 'AWAITING_PAYMENT_VERIFICATION',
+            payment: {
+              ...(o.payment || {
+                id: `temp-${orderId}`,
+                orderId: o.id,
+                amount: o.total,
+                currency: 'FCFA',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }),
+              method: paymentMethod,
+              status: 'AWAITING_VERIFICATION',
+              transactionRef: transactionRef || null,
+              clientDeclaredAt: new Date().toISOString(),
+            },
             statusHistory: [
               ...(o.statusHistory || []),
               {
-                status: o.status,
+                status: 'AWAITING_PAYMENT_VERIFICATION',
                 changedAt: new Date().toISOString(),
-                note: `Paiement ${methodLabel} validé par le client (${amount ? `${amount} FCFA` : 'validé'})`,
+                note: `Paiement ${methodLabel} signalé par le client${transactionRef ? ` (Réf: ${transactionRef})` : ''} — En attente de validation`,
               },
             ],
           };
@@ -1153,35 +1314,108 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       })
     );
 
-    // 2. Diffusion BroadcastChannel 0ms pour la cuisine et les autres écrans
-    const syncPayload = {
-      type: 'PAYMENT_CONFIRMED',
-      orderId,
-      method: paymentMethod,
-      amount,
-      at: Date.now(),
-    };
+    // 2. Appel backend vers la route sécurisée declare-payment
     try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('teranga_orders_sync');
-        bc.postMessage(syncPayload);
-        bc.close();
-      }
-    } catch {}
-    try {
-      localStorage.setItem('teranga_sync_event', JSON.stringify(syncPayload));
-    } catch {}
-
-    // 3. Notification vers l'API backend pour persister en BDD PostgreSQL / MariaDB
-    try {
-      await fetch(`${BACKEND_URL}/api/orders/${cleanTargetId || orderId}/payment-confirm`, {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${cleanTargetId || orderId}/declare-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentMethod, amount }),
+        body: JSON.stringify({ method: paymentMethod, transactionRef, customerNote }),
       });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.order) {
+          setOrders(prev =>
+            prev.map(o => (o.id === data.order.id || cleanKey(o.id) === cleanKey(data.order.id) ? data.order : o))
+          );
+          return data.order;
+        }
+      }
     } catch (e) {
-      console.warn('Erreur confirmation paiement backend :', e);
+      console.warn('Erreur déclaration paiement backend :', e);
     }
+
+    const current = orders.find(o => o.id === orderId || cleanKey(o.id) === cleanTargetId);
+    return current!;
+  };
+
+  /**
+   * 2. Approbation du paiement par le gérant (ADMIN / STAFF)
+   * RÈGLE ABSOLUE : Transmet la commande en cuisine uniquement après approbation.
+   */
+  const approveOrderPayment = async (orderId: string, note?: string): Promise<Order> => {
+    const cleanTargetId = String(orderId).replace(/^[#\s]*TF-/i, '').trim();
+    const token = getAuthToken();
+
+    const res = await fetch(`${BACKEND_URL}/api/orders/${cleanTargetId || orderId}/approve-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ note }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de l’approbation du paiement');
+    }
+
+    const data = await res.json();
+    if (data.order) {
+      setOrders(prev =>
+        prev.map(o => (o.id === data.order.id || cleanKey(o.id) === cleanKey(data.order.id) ? data.order : o))
+      );
+      return data.order;
+    }
+
+    const current = orders.find(o => o.id === orderId || cleanKey(o.id) === cleanTargetId);
+    return current!;
+  };
+
+  /**
+   * 3. Rejet du paiement par le gérant (ADMIN / STAFF) avec motif obligatoire
+   */
+  const rejectOrderPayment = async (orderId: string, reason: string): Promise<Order> => {
+    const cleanTargetId = String(orderId).replace(/^[#\s]*TF-/i, '').trim();
+    const token = getAuthToken();
+
+    const res = await fetch(`${BACKEND_URL}/api/orders/${cleanTargetId || orderId}/reject-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ reason }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors du rejet du paiement');
+    }
+
+    const data = await res.json();
+    if (data.order) {
+      setOrders(prev =>
+        prev.map(o => (o.id === data.order.id || cleanKey(o.id) === cleanKey(data.order.id) ? data.order : o))
+      );
+      return data.order;
+    }
+
+    const current = orders.find(o => o.id === orderId || cleanKey(o.id) === cleanTargetId);
+    return current!;
+  };
+
+  /**
+   * Alias de rétro-compatibilité pour confirmOrderPayment
+   */
+  const confirmOrderPayment = async (
+    orderId: string,
+    paymentMethod: 'WAVE' | 'OM',
+    amount?: number,
+    transactionRef?: string
+  ): Promise<void> => {
+    await declareOrderPayment(orderId, paymentMethod, transactionRef);
   };
 
   const updateTableStatus = (tableNumber: string, status: TableStatus) => {
@@ -1463,6 +1697,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         clearCart,
         createOrder,
         confirmOrderPayment,
+        declareOrderPayment,
+        approveOrderPayment,
+        rejectOrderPayment,
         updateOrderStatus,
         updateTableStatus,
         addTable,

@@ -23,7 +23,7 @@ if ('serviceWorker' in navigator) {
           if (installingWorker) {
             installingWorker.addEventListener('statechange', () => {
               if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] Nouvelle version v7 prête. Mise à jour automatique.');
+                console.log('[PWA] Nouvelle version v12 prête. Mise à jour automatique.');
               }
             });
           }

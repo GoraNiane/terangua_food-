@@ -1,5 +1,6 @@
 import { prisma } from '../config';
 import { computeDateRange } from './sales.service';
+import { cacheService } from './cache.service';
 
 export interface StatisticsFilter {
   period?: string;
@@ -10,13 +11,17 @@ export interface StatisticsFilter {
 /**
  * Calculateur centralisé des KPI et Statistiques Financières (Règles 14, 18, 19, 20, 21)
  * TOUS LES CHIFFRES SONT CALCULÉS EXCLUSIVEMENT DEPUIS LES VRAIES VENTES (modèle Sale)
+ * Protection anti-OOM et mise en cache mémoire 60 secondes
  */
 export const getOperationalAndFinancialStatistics = async (filters: StatisticsFilter = {}) => {
   const { period = 'today', startDate, endDate } = filters;
-  const range = computeDateRange(period, startDate, endDate);
+  const cacheKey = `stats:${period}:${startDate || ''}:${endDate || ''}`;
 
-  // 1. Récupérer toutes les ventes réelles de la période en cours
-  const currentSales = await prisma.sale.findMany({
+  return await cacheService.getOrSet(cacheKey, async () => {
+    const range = computeDateRange(period, startDate, endDate);
+
+    // 1. Récupérer toutes les ventes réelles de la période en cours
+    const currentSales = await prisma.sale.findMany({
     where: {
       createdAt: {
         gte: range.start,
@@ -330,4 +335,5 @@ export const getOperationalAndFinancialStatistics = async (filters: StatisticsFi
     },
     insights,
   };
+  }, 60); // Cache TTL: 60s
 };

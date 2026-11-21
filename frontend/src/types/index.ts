@@ -1,6 +1,38 @@
 export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 
-export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
+export type OrderStatus =
+  | 'PENDING'
+  | 'PENDING_PAYMENT'
+  | 'AWAITING_PAYMENT_VERIFICATION'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'READY'
+  | 'SERVED'
+  | 'CANCELLED';
+
+export type PaymentStatus =
+  | 'PENDING'
+  | 'AWAITING_VERIFICATION'
+  | 'PAID'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'REFUNDED';
+
+export interface Payment {
+  id: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  method: 'WAVE' | 'OM' | 'CASH' | 'CARD' | string;
+  status: PaymentStatus;
+  transactionRef?: string | null;
+  clientDeclaredAt?: string | null;
+  verifiedByUserId?: string | null;
+  verifiedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type TableStatus = 'FREE' | 'OCCUPIED' | 'RESERVED';
 
@@ -127,6 +159,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   statusHistory?: OrderStatusHistoryItem[];
+  payment?: Payment | null;
 }
 
 export interface Customer {

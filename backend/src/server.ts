@@ -8,6 +8,8 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { config } from './config';
 import apiRoutes from './routes/api';
+import { nativeCompression } from './middleware/compression.middleware';
+import { apiRateLimiter } from './middleware/rateLimiter';
 
 const app = express();
 const server = http.createServer(app);
@@ -24,7 +26,9 @@ app.set('io', io);
 
 // Middlewares
 app.use(cors({ origin: '*' }));
+app.use(nativeCompression); // Compression native Gzip (réduit la taille des réponses de 80%)
 app.use(express.json());
+app.use('/api', apiRateLimiter); // Protection globale contre les pics de requêtes et le scraping
 
 // Extraction et vérification du rôle utilisateur (supporte JWT et tokens démo hors-ligne)
 function extractUserRole(token?: string): string | null {
@@ -169,6 +173,15 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     console.log(`⚡ WebSocket Socket.IO enabled for TERANGA FOOD`);
   });
 }
+
+// --- RÉSILIENCE PROCESSUS : SHIELD ANTI-CRASH ---
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [Résilience Anti-Crash] Unhandled Rejection capturée :', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [Résilience Anti-Crash] Uncaught Exception capturée :', err);
+});
 
 // Export pour Vercel Serverless (évite l'avertissement MIXED_EXPORTS)
 export default app;

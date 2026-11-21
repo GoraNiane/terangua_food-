@@ -11,7 +11,7 @@ import * as promoCtrl from '../controllers/promotionController';
 import * as reviewCtrl from '../controllers/reviewController';
 import * as scheduleCtrl from '../controllers/menuScheduleController';
 import { authenticateToken, requireRole } from '../middleware/auth';
-import { authRateLimiter } from '../middleware/rateLimiter';
+import { authRateLimiter, orderRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -55,10 +55,13 @@ router.get('/qrcodes', tableCtrl.getQRCodes);
 // --- ESPACE CUISINE DÉDIÉ (SANS PRIX NI DONNÉES FINANCIÈRES) ---
 router.get('/orders/kitchen', authenticateToken, requireRole(['ADMIN', 'STAFF', 'KITCHEN']), orderCtrl.getKitchenOrders);
 
-// --- COMMANDES ADMINISTRATIVES & PAIEMENTS ---
-router.post('/orders', orderCtrl.createOrder); // Commande publique client
-router.post('/orders/:id/payment-confirm', orderCtrl.confirmOrderPayment); // Confirmation paiement client Wave / OM
-router.post('/orders/:id/pay', orderCtrl.confirmOrderPayment); // Alias paiement client
+// --- COMMANDES ADMINISTRATIVES & CIRCUIT DE PAIEMENT SÉCURISÉ ---
+router.post('/orders', orderRateLimiter, orderCtrl.createOrder); // Commande publique client (protégée anti-spam)
+router.post('/orders/:id/declare-payment', orderRateLimiter, orderCtrl.declarePayment); // Déclaration client Wave / OM
+router.post('/orders/:id/payment-confirm', orderRateLimiter, orderCtrl.confirmOrderPayment); // Rétro-compatibilité
+router.post('/orders/:id/pay', orderRateLimiter, orderCtrl.confirmOrderPayment); // Alias déclaration
+router.post('/orders/:id/approve-payment', authenticateToken, requireRole(['ADMIN', 'STAFF']), orderCtrl.approvePayment); // Approbation gérant
+router.post('/orders/:id/reject-payment', authenticateToken, requireRole(['ADMIN', 'STAFF']), orderCtrl.rejectPayment); // Rejet gérant avec motif
 router.get('/orders', authenticateToken, requireRole(['ADMIN', 'STAFF']), orderCtrl.getOrders);
 router.get('/orders/:id', orderCtrl.getOrderById); // Suivi de commande client
 router.patch('/orders/:id/status', authenticateToken, requireRole(['ADMIN', 'STAFF', 'KITCHEN']), orderCtrl.updateOrderStatus);

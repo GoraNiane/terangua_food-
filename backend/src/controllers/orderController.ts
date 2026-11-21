@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { createOrderSchema, updateOrderStatusSchema } from '../validations/orderValidation';
+import {
+  createOrderSchema,
+  updateOrderStatusSchema,
+  declarePaymentSchema,
+  approvePaymentSchema,
+  rejectPaymentSchema,
+} from '../validations/orderValidation';
 import * as orderService from '../services/order.service';
 
 /**
@@ -25,21 +31,24 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // 3. Diffusion temps réel Socket.IO (Admin, Cuisine & Client)
     const io = (req.app as any).get('io');
     if (io) {
-      const kitchenOrder = orderService.sanitizeOrderForKitchen(order);
-      // Diffusion globale immédiate sans dépendance aux rooms
-      io.emit('order:created', order);
-      io.emit('kitchen_new_order', kitchenOrder);
-      io.emit('new_order', order);
+      const isReadyForKitchen = order.status === 'CONFIRMED';
+      const kitchenOrder = isReadyForKitchen ? orderService.sanitizeOrderForKitchen(order) : null;
 
-      // Diffusion ciblée par room pour compatibilité
-      io.to('kitchen').emit('order:created', kitchenOrder);
-      io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
+      // Toujours diffuser à l'Admin
       io.to('admin').emit('order:created', order);
       io.to('admin').emit('new_order', order);
+
+      // Diffuser au client pour suivi
       io.to(`order_${order.id}`).emit('order:created', order);
       const cleanId = String(order.id).replace(/^[#\s]*TF-/i, '').trim();
       if (cleanId && cleanId !== order.id) {
         io.to(`order_${cleanId}`).emit('order:created', order);
+      }
+
+      // RÈGLE ABSOLUE : Transmettre à la cuisine UNIQUEMENT si la commande est CONFIRMED
+      if (isReadyForKitchen && kitchenOrder) {
+        io.to('kitchen').emit('order:created', kitchenOrder);
+        io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
       }
     }
 
@@ -61,8 +70,12 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
  */
 export const getOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { status } = req.query;
-    const orders = await orderService.getAllOrders(status as string);
+    const { status, limit, offset } = req.query;
+    const orders = await orderService.getAllOrders(
+      status as string,
+      limit ? Number(limit) : 150,
+      offset ? Number(offset) : 0
+    );
     res.json({ orders });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la récupération des commandes', details: err.message });
@@ -172,52 +185,203 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
 };
 
 /**
- * Confirmation de paiement client (Wave / OM) avec propagation instantanée
- * POST /api/orders/:id/payment-confirm
+ * Déclaration de paiement par le client (Wave / OM)
+ * RÈGLE ABSOLUE : Cette déclaration NE TRANSMET JAMAIS la commande à la cuisine.
+ * POST /api/orders/:id/declare-payment
  */
-export const confirmOrderPayment = async (req: Request, res: Response): Promise<void> => {
+export const declarePayment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { paymentMethod, amount, transactionRef } = req.body;
+    const validation = declarePaymentSchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(400).json({
+        error: 'Données de paiement invalides',
+        details: validation.error.flatten(),
+      });
+      return;
+    }
 
-    const method = String(paymentMethod || 'WAVE').toUpperCase();
-    const updatedOrder = await orderService.confirmPayment(id, {
+    const { method, transactionRef, customerNote } = validation.data;
+    const updatedOrder = await orderService.declarePayment(id, {
       method,
-      amount: Number(amount) || 0,
       transactionRef,
+      customerNote,
     });
 
-    // Diffusion temps réel Socket.IO immédiate
+    // Diffusion temps réel Socket.IO : UNIQUEMENT Admin et Client (PAS LA CUISINE)
     const io = (req.app as any).get('io');
     if (io) {
-      const kitchenOrder = orderService.sanitizeOrderForKitchen(updatedOrder);
-      // Diffusion universelle
-      io.emit('payment:confirmed', { orderId: updatedOrder.id, method });
-      io.emit('order:updated', updatedOrder);
-      io.emit('order_status_updated', updatedOrder);
-      io.emit('kitchen_order_updated', kitchenOrder);
+      const payload = {
+        orderId: updatedOrder.id,
+        orderNumber: updatedOrder.orderNumber,
+        method,
+        transactionRef,
+        amount: updatedOrder.total,
+        declaredAt: new Date().toISOString(),
+      };
 
-      // Diffusion ciblée par room
-      io.to('kitchen').emit('order:updated', kitchenOrder);
-      io.to('kitchen').emit('order_status_updated', kitchenOrder);
+      io.to('admin').emit('payment:declared', payload);
       io.to('admin').emit('order:updated', updatedOrder);
-      io.to('admin').emit('order_status_updated', updatedOrder);
-      io.to(`order_${updatedOrder.id}`).emit('order:updated', updatedOrder);
+
+      const targetRooms = new Set([`order_${updatedOrder.id}`, `order_${id}`]);
       const cleanId = String(updatedOrder.id).replace(/^[#\s]*TF-/i, '').trim();
-      if (cleanId && cleanId !== updatedOrder.id) {
-        io.to(`order_${cleanId}`).emit('order:updated', updatedOrder);
-      }
+      if (cleanId) targetRooms.add(`order_${cleanId}`);
+
+      targetRooms.forEach(room => {
+        io.to(room).emit('payment:declared', payload);
+        io.to(room).emit('order:updated', updatedOrder);
+      });
     }
 
     res.json({
-      message: `Paiement ${method === 'OM' ? 'Orange Money' : 'Wave'} confirmé pour la commande #${updatedOrder.id}`,
+      message:
+        'Votre paiement a été signalé. Votre commande sera transmise à la cuisine après vérification et validation par le restaurant.',
       order: updatedOrder,
     });
   } catch (err: any) {
-    console.error('Erreur confirmOrderPayment :', err);
+    console.error('Erreur declarePayment :', err);
     res.status(400).json({
-      error: err.message || 'Erreur lors de la confirmation du paiement',
+      error: err.message || 'Erreur lors de la déclaration du paiement',
     });
   }
+};
+
+/**
+ * Approbation du paiement par le gérant ou un personnel autorisé (ADMIN / STAFF)
+ * RÈGLE ABSOLUE : Transmet la commande à la cuisine MAINTENANT ET SEULEMENT MAINTENANT.
+ * POST /api/orders/:id/approve-payment
+ */
+export const approvePayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const verifierUserId = req.user?.id;
+
+    if (!verifierUserId) {
+      res.status(401).json({ error: 'Utilisateur non authentifié' });
+      return;
+    }
+
+    const validation = approvePaymentSchema.safeParse(req.body);
+    const note = validation.success ? validation.data.note : undefined;
+
+    const { order, newlyApproved } = await orderService.approvePayment(id, verifierUserId, note);
+
+    // Diffusion temps réel Socket.IO
+    const io = (req.app as any).get('io');
+    if (io) {
+      const kitchenOrder = orderService.sanitizeOrderForKitchen(order);
+
+      // 1. Transmission à la cuisine UNIQUEMENT si nouvellement approuvé
+      if (newlyApproved) {
+        io.to('kitchen').emit('kitchen_new_order', kitchenOrder);
+        io.to('kitchen').emit('order:created', kitchenOrder);
+      }
+      io.to('kitchen').emit('order:updated', kitchenOrder);
+
+      // 2. Notification Admin
+      io.to('admin').emit('payment:approved', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        verifiedBy: verifierUserId,
+      });
+      io.to('admin').emit('order:updated', order);
+
+      // 3. Notification Client
+      const clientPayload = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        message: 'Votre paiement a été approuvé. Votre commande est maintenant en préparation.',
+      };
+
+      const targetRooms = new Set([`order_${order.id}`, `order_${id}`]);
+      const cleanId = String(order.id).replace(/^[#\s]*TF-/i, '').trim();
+      if (cleanId) targetRooms.add(`order_${cleanId}`);
+
+      targetRooms.forEach(room => {
+        io.to(room).emit('payment:approved', clientPayload);
+        io.to(room).emit('order:updated', order);
+      });
+    }
+
+    res.json({
+      message: 'Paiement approuvé avec succès. Commande transmise à la cuisine.',
+      order,
+    });
+  } catch (err: any) {
+    console.error('Erreur approvePayment :', err);
+    res.status(400).json({
+      error: err.message || 'Erreur lors de l’approbation du paiement',
+    });
+  }
+};
+
+/**
+ * Rejet du paiement par le gérant (ADMIN / STAFF) avec motif obligatoire
+ * RÈGLE ABSOLUE : La commande n'est JAMAIS transmise à la cuisine et est annulée.
+ * POST /api/orders/:id/reject-payment
+ */
+export const rejectPayment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const verifierUserId = req.user?.id;
+
+    if (!verifierUserId) {
+      res.status(401).json({ error: 'Utilisateur non authentifié' });
+      return;
+    }
+
+    const validation = rejectPaymentSchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(400).json({
+        error: 'Le motif de rejet est obligatoire (au moins 3 caractères)',
+        details: validation.error.flatten(),
+      });
+      return;
+    }
+
+    const { reason } = validation.data;
+    const updatedOrder = await orderService.rejectPayment(id, verifierUserId, reason);
+
+    // Diffusion temps réel Socket.IO : Admin et Client UNIQUEMENT (JAMAIS la cuisine)
+    const io = (req.app as any).get('io');
+    if (io) {
+      const payload = {
+        orderId: updatedOrder.id,
+        orderNumber: updatedOrder.orderNumber,
+        reason,
+        message: `Paiement rejeté : ${reason}`,
+      };
+
+      io.to('admin').emit('payment:rejected', payload);
+      io.to('admin').emit('order:updated', updatedOrder);
+
+      const targetRooms = new Set([`order_${updatedOrder.id}`, `order_${id}`]);
+      const cleanId = String(updatedOrder.id).replace(/^[#\s]*TF-/i, '').trim();
+      if (cleanId) targetRooms.add(`order_${cleanId}`);
+
+      targetRooms.forEach(room => {
+        io.to(room).emit('payment:rejected', payload);
+        io.to(room).emit('order:updated', updatedOrder);
+      });
+    }
+
+    res.json({
+      message: 'Paiement rejeté et commande annulée.',
+      order: updatedOrder,
+    });
+  } catch (err: any) {
+    console.error('Erreur rejectPayment :', err);
+    res.status(400).json({
+      error: err.message || 'Erreur lors du rejet du paiement',
+    });
+  }
+};
+
+/**
+ * Rétro-compatibilité : Confirmation / déclaration de paiement client (Wave / OM)
+ * POST /api/orders/:id/payment-confirm
+ */
+export const confirmOrderPayment = async (req: Request, res: Response): Promise<void> => {
+  return declarePayment(req, res);
 };
 

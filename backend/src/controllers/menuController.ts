@@ -1,38 +1,42 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config';
 import { AuthRequest } from '../middleware/auth';
+import { cacheService } from '../services/cache.service';
 
 export const getFullMenu = async (req: Request, res: Response): Promise<void> => {
   try {
-    const categories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        products: {
-          where: { isAvailable: true },
-          include: {
-            options: {
-              include: { values: true },
+    const parsedCategories = await cacheService.getOrSet('menu:full', async () => {
+      const categories = await prisma.category.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          products: {
+            where: { isAvailable: true },
+            include: {
+              options: {
+                include: { values: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    const parsedCategories = categories.map(c => ({
-      ...c,
-      products: c.products.map(p => ({
-        ...p,
-        ingredients: (() => {
-          try {
-            return JSON.parse(p.ingredients);
-          } catch {
-            return [p.ingredients];
-          }
-        })(),
-      })),
-    }));
+      return categories.map(c => ({
+        ...c,
+        products: c.products.map(p => ({
+          ...p,
+          ingredients: (() => {
+            try {
+              return JSON.parse(p.ingredients);
+            } catch {
+              return [p.ingredients];
+            }
+          })(),
+        })),
+      }));
+    }, 300); // 5 minutes en cache mémoire avec protection Singleflight
 
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
     res.json({ categories: parsedCategories });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la récupération du menu', details: err.message });
@@ -41,9 +45,12 @@ export const getFullMenu = async (req: Request, res: Response): Promise<void> =>
 
 export const getCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const categories = await prisma.category.findMany({
-      orderBy: { sortOrder: 'asc' },
-    });
+    const categories = await cacheService.getOrSet('menu:categories', async () => {
+      return await prisma.category.findMany({
+        orderBy: { sortOrder: 'asc' },
+      });
+    }, 300);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
     res.json({ categories });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la récupération des catégories', details: err.message });
@@ -61,6 +68,7 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
         sortOrder: Number(sortOrder) || 0,
       },
     });
+    cacheService.invalidatePrefix('menu:');
     res.status(201).json({ category });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la création de la catégorie', details: err.message });
@@ -75,6 +83,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
       where: { id },
       data,
     });
+    cacheService.invalidatePrefix('menu:');
     res.json({ category });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la mise à jour de la catégorie', details: err.message });
@@ -85,6 +94,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { id } = req.params;
     await prisma.category.delete({ where: { id } });
+    cacheService.invalidatePrefix('menu:');
     res.json({ message: 'Catégorie supprimée avec succès' });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la suppression de la catégorie', details: err.message });
@@ -246,6 +256,7 @@ export const createProduct = async (req: AuthRequest, res: Response): Promise<vo
       },
     });
 
+    cacheService.invalidatePrefix('menu:');
     res.status(201).json({ product });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la création du produit', details: err.message });
@@ -292,6 +303,7 @@ export const updateProduct = async (req: AuthRequest, res: Response): Promise<vo
       },
     });
 
+    cacheService.invalidatePrefix('menu:');
     res.json({ product });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la mise à jour du produit', details: err.message });
@@ -302,6 +314,7 @@ export const deleteProduct = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params;
     await prisma.product.delete({ where: { id } });
+    cacheService.invalidatePrefix('menu:');
     res.json({ message: 'Produit supprimé avec succès' });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la suppression du produit', details: err.message });

@@ -19,13 +19,6 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
   showTitle = true,
 }) => {
   const [activeModal, setActiveModal] = useState<'wave' | 'om' | null>(null);
-  const { confirmOrderPayment } = useRestaurantStore();
-
-  const handleWaveClick = () => {
-    if (confirmOrderPayment) {
-      confirmOrderPayment(order.id, 'WAVE', order.total);
-    }
-  };
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -38,18 +31,16 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
             Choisissez votre moyen de paiement
           </h3>
           <p className="text-[11px] text-[#666666]">
-            Réglez instantanément votre commande de {formatFCFA(order.total)}
+            Réglez votre commande de {formatFCFA(order.total)} puis confirmez votre règlement
           </p>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {/* Bouton Wave — Navigation directe avec pay.wave.com et montant prescrit */}
-        <a
-          href={getWavePaymentUrl(order.total)}
-          onClick={handleWaveClick}
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Bouton Wave */}
+        <button
+          type="button"
+          onClick={() => setActiveModal('wave')}
           className="group relative overflow-hidden flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[#1DC3F2] hover:bg-[#16add7] text-white shadow-soft transition-all duration-200 active:scale-98 cursor-pointer border border-[#18b5e4]"
         >
           <div className="flex items-center gap-3">
@@ -58,13 +49,13 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
             </div>
             <div className="text-left">
               <span className="text-[10px] uppercase font-black tracking-wider text-white/85 block">
-                Paiement direct Wave
+                Paiement Wave
               </span>
               <span className="font-sans font-black text-sm sm:text-base leading-tight block">
                 Payer avec Wave
               </span>
               <span className="text-[10px] text-white/90 font-semibold block">
-                Montant pré-rempli • 1 clic
+                Lien direct • Pré-rempli
               </span>
             </div>
           </div>
@@ -73,7 +64,7 @@ export const PaymentActionButtons: React.FC<PaymentActionButtonsProps> = ({
               {formatFCFA(order.total)}
             </span>
           </div>
-        </a>
+        </button>
 
         {/* Bouton Orange Money (OM) */}
         <button

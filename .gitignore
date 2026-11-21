@@ -49,3 +49,6 @@ scratch/
 .tempmediaStorage/
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+backups/
+*/backups/
+

@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { X, Phone, MessageSquare, Utensils, MapPin, Clock, Send, CheckCircle2, Printer } from 'lucide-react';
+import {
+  X,
+  Phone,
+  MessageSquare,
+  Utensils,
+  MapPin,
+  Clock,
+  Send,
+  CheckCircle2,
+  Printer,
+  CreditCard,
+  CheckCircle,
+  XCircle,
+  ShieldCheck,
+} from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
 import { formatFCFA } from '../../services/whatsappService';
 import { OrderStatusBadge } from './OrderStatusBadge';
@@ -13,13 +27,44 @@ interface OrderDetailsModalProps {
 }
 
 export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, isOpen, onClose }) => {
-  const { updateOrderStatus, restaurant } = useRestaurantStore();
+  const { updateOrderStatus, approveOrderPayment, rejectOrderPayment, restaurant } = useRestaurantStore();
   const [isThermalOpen, setIsThermalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   if (!isOpen || !order) return null;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     updateOrderStatus(order.id, newStatus);
+  };
+
+  const handleApprovePayment = async () => {
+    setIsProcessing(true);
+    try {
+      await approveOrderPayment(order.id);
+      onClose();
+    } catch (e: any) {
+      alert(e.message || "Erreur lors de l'approbation");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRejectPayment = async () => {
+    if (!rejectionReason.trim() || rejectionReason.trim().length < 3) {
+      alert('Veuillez indiquer un motif de rejet clair (au moins 3 caractères).');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await rejectOrderPayment(order.id, rejectionReason.trim());
+      onClose();
+    } catch (e: any) {
+      alert(e.message || "Erreur lors du rejet");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleContactCustomer = () => {
@@ -156,6 +201,91 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, isO
               <span>Imprimer le ticket thermique (80mm)</span>
             </button>
           </div>
+
+          {/* Bloc de validation du paiement Wave / OM pour le gérant */}
+          {order.status === 'AWAITING_PAYMENT_VERIFICATION' && (
+            <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-700" />
+                  <span className="font-extrabold text-xs text-purple-950 uppercase tracking-wider">
+                    Paiement {order.payment?.method === 'OM' ? 'Orange Money' : 'Wave'} à vérifier
+                  </span>
+                </div>
+                <span className="font-mono font-black text-xs text-purple-900 bg-purple-200/60 px-2 py-0.5 rounded-md">
+                  {formatFCFA(order.total)}
+                </span>
+              </div>
+
+              <div className="text-xs text-[#555555] space-y-1 bg-white p-3 rounded-xl border border-purple-100">
+                <p>
+                  Référence déclarée : <strong className="text-[#0A0A0A] font-mono">{order.payment?.transactionRef || 'Aucune référence'}</strong>
+                </p>
+                {order.payment?.clientDeclaredAt && (
+                  <p className="text-[11px] text-[#777777]">
+                    Déclaré le : {new Date(order.payment.clientDeclaredAt).toLocaleString('fr-FR')}
+                  </p>
+                )}
+                <p className="text-[11px] text-purple-900 font-semibold pt-1">
+                  ℹ️ Vérifiez la réception sur votre téléphone avant d'approuver. L'approbation transmettra immédiatement la commande en cuisine.
+                </p>
+              </div>
+
+              {!showRejectInput ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleApprovePayment}
+                    disabled={isProcessing}
+                    className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>APPROUVER</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowRejectInput(true)}
+                    disabled={isProcessing}
+                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-red-50 text-red-600 border border-red-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>REJETER</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 animate-fade-in">
+                  <label className="text-[11px] font-bold text-red-900 block">
+                    Motif obligatoire du rejet *
+                  </label>
+                  <input
+                    type="text"
+                    value={rejectionReason}
+                    onChange={e => setRejectionReason(e.target.value)}
+                    placeholder="Ex: Montant non reçu, référence erronée..."
+                    className="w-full bg-white border border-red-300 focus:border-red-500 rounded-xl px-3 py-2 text-xs text-[#0A0A0A] outline-none"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectInput(false)}
+                      className="px-3 py-1.5 text-xs font-semibold text-[#666666] hover:bg-gray-100 rounded-lg"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRejectPayment}
+                      disabled={isProcessing || rejectionReason.trim().length < 3}
+                      className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs disabled:opacity-50"
+                    >
+                      {isProcessing ? 'En cours...' : 'Confirmer le rejet'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Change Status Controls */}
           <div className="space-y-2 pt-2 border-t border-[#EEEEEE]">

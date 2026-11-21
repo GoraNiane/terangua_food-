@@ -76,10 +76,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   restaurant,
 }) => {
   const { lang } = useLanguage();
-  const { confirmOrderPayment } = useRestaurantStore();
+  const { declareOrderPayment } = useRestaurantStore();
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedRef, setCopiedRef] = useState(false);
-  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [transactionRef, setTransactionRef] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentDeclared, setPaymentDeclared] = useState(false);
 
   if (!isOpen) return null;
 
@@ -103,9 +105,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   const handleOpenApp = () => {
-    if (confirmOrderPayment) {
-      confirmOrderPayment(order.id, isWave ? 'WAVE' : 'OM', order.total);
-    }
     if (isWave) {
       // Wave official merchant payment link with pre-filled amount
       const waveUrl = getWavePaymentUrl(order.total);
@@ -116,22 +115,33 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  const handleConfirmPaid = () => {
-    if (confirmOrderPayment) {
-      confirmOrderPayment(order.id, isWave ? 'WAVE' : 'OM', order.total);
-    }
+  const handleConfirmPaid = async () => {
+    setIsSubmitting(true);
     try {
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.5 },
-        colors: isWave ? ['#1DC3F2', '#0A0A0A', '#FFFFFF'] : ['#FF7900', '#000000', '#FFFFFF'],
-      });
-    } catch {}
-    setPaymentConfirmed(true);
-    setTimeout(() => {
-      onClose();
-    }, 2000);
+      await declareOrderPayment(
+        order.id,
+        isWave ? 'WAVE' : 'OM',
+        transactionRef.trim() || undefined
+      );
+
+      try {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.5 },
+          colors: isWave ? ['#1DC3F2', '#0A0A0A', '#FFFFFF'] : ['#FF7900', '#000000', '#FFFFFF'],
+        });
+      } catch {}
+
+      setPaymentDeclared(true);
+      setTimeout(() => {
+        onClose();
+      }, 3000);
+    } catch (err) {
+      console.error('Erreur declaration paiement :', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -284,6 +294,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             )}
           </div>
 
+          {/* Champ optionnel : Référence de transaction */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-[#666666] block">
+              Référence de transaction {isWave ? 'Wave' : 'Orange Money'} (optionnel)
+            </label>
+            <input
+              type="text"
+              value={transactionRef}
+              onChange={e => setTransactionRef(e.target.value)}
+              placeholder={isWave ? "Ex: TR-94827492 ou ID reçu par SMS" : "Ex: CI2409... ou ID reçu par SMS"}
+              className="w-full bg-[#FAFAFA] border border-[#EAEAEA] focus:border-[#0A0A0A] rounded-xl px-3.5 py-2.5 text-xs text-[#0A0A0A] placeholder:text-[#999999] outline-none transition-all"
+            />
+          </div>
+
           {/* Primary Action Button */}
           <div className="space-y-2.5 pt-1">
             {isWave ? (
@@ -309,14 +333,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </button>
             )}
 
-            {/* I have paid validation button */}
+            {/* I have paid declaration button */}
             <button
               type="button"
               onClick={handleConfirmPaid}
-              disabled={paymentConfirmed}
-              className="w-full py-3 px-4 rounded-xl bg-white border border-[#EAEAEA] hover:border-[#0A0A0A] text-xs font-bold text-[#0A0A0A] flex items-center justify-center gap-2 transition-all active:scale-98 disabled:bg-emerald-50 disabled:border-emerald-200 disabled:text-emerald-800"
+              disabled={isSubmitting || paymentDeclared}
+              className="w-full py-3 px-4 rounded-xl bg-white border border-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white text-xs font-bold text-[#0A0A0A] flex items-center justify-center gap-2 transition-all active:scale-98 disabled:bg-emerald-50 disabled:border-emerald-200 disabled:text-emerald-800"
             >
-              {paymentConfirmed ? (
+              {isSubmitting ? (
+                <span>Envoi de votre déclaration...</span>
+              ) : paymentDeclared ? (
                 <>
                   <Check className="w-4 h-4 text-emerald-600" />
                   <span>Paiement signalé au restaurant ✓</span>
@@ -328,6 +354,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </>
               )}
             </button>
+
+            {/* Message de confirmation de déclaration */}
+            {paymentDeclared && (
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900 leading-relaxed space-y-1 animate-fade-in">
+                <p className="font-bold">✓ Votre paiement a été signalé avec succès.</p>
+                <p className="text-emerald-800">
+                  Votre commande sera transmise à la cuisine après vérification et validation par le restaurant.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

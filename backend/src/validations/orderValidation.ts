@@ -25,6 +25,7 @@ export const createOrderSchema = z
     orderType: z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']).default('DINE_IN'),
     tableNumber: z.string().optional().nullable(),
     deliveryAddress: z.string().max(255).optional().nullable(),
+    paymentMethod: z.enum(['WAVE', 'OM', 'CASH', 'CARD']).optional().default('CASH'),
     notes: z.string().max(500).optional().nullable(),
     subtotal: z.number().optional(),
     discount: z.number().optional(),
@@ -58,6 +59,30 @@ export const createOrderSchema = z
   );
 
 export const updateOrderStatusSchema = z.object({
-  status: z.enum(['PENDING', 'CONFIRMED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'CANCELLED']),
+  status: z.enum([
+    'PENDING',
+    'PENDING_PAYMENT',
+    'AWAITING_PAYMENT_VERIFICATION',
+    'CONFIRMED',
+    'ACCEPTED',
+    'PREPARING',
+    'READY',
+    'SERVED',
+    'CANCELLED',
+  ]),
   note: z.string().max(300).optional().nullable(),
+});
+
+export const declarePaymentSchema = z.object({
+  method: z.enum(['WAVE', 'OM', 'CASH', 'CARD']).default('WAVE'),
+  transactionRef: z.string().max(100).optional().nullable(),
+  customerNote: z.string().max(255).optional().nullable(),
+});
+
+export const approvePaymentSchema = z.object({
+  note: z.string().max(255).optional().nullable(),
+});
+
+export const rejectPaymentSchema = z.object({
+  reason: z.string().min(3, 'Le motif de rejet est obligatoire (au moins 3 caractères)').max(500),
 });

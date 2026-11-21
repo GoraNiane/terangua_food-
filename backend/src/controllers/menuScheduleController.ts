@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config';
+import { cacheService } from '../services/cache.service';
 
 // 7 jours par défaut avec la gastronomie traditionnelle sénégalaise
 export const DEFAULT_WEEKLY_SCHEDULE = [
@@ -80,73 +81,75 @@ export const DEFAULT_WEEKLY_SCHEDULE = [
  */
 export const getWeeklySchedule = async (req: Request, res: Response) => {
   try {
-    // Vérifier si la table contient déjà la programmation
-    let schedules: any[] = [];
-    try {
-      schedules = await (prisma as any).dailyMenuSchedule.findMany({
-        orderBy: { dayOfWeek: 'asc' },
-      });
-    } catch {
-      // Si la table n'est pas encore initialisée en BDD, fallback propre
-    }
-
-    if (!schedules || schedules.length === 0) {
-      // Initialiser avec les valeurs par défaut
+    const populatedSchedules = await cacheService.getOrSet('schedule:weekly', async () => {
+      // Vérifier si la table contient déjà la programmation
+      let schedules: any[] = [];
       try {
-        for (const item of DEFAULT_WEEKLY_SCHEDULE) {
-          await (prisma as any).dailyMenuSchedule.upsert({
-            where: { dayOfWeek: item.dayOfWeek },
-            update: {},
-            create: {
-              ...item,
-              productIds: JSON.stringify(item.productIds),
-            },
-          });
-        }
         schedules = await (prisma as any).dailyMenuSchedule.findMany({
           orderBy: { dayOfWeek: 'asc' },
         });
       } catch {
-        // En cas d'indisponibilité BDD, renvoyer les données par défaut en mémoire
-        schedules = DEFAULT_WEEKLY_SCHEDULE.map(s => ({
-          ...s,
-          id: `sched_${s.dayOfWeek}`,
-          productIds: JSON.stringify(s.productIds),
-        }));
+        // Fallback
       }
-    }
 
-    // Récupérer tous les produits pour peupler les listes
-    let allProducts: any[] = [];
-    try {
-      allProducts = await prisma.product.findMany({
-        where: { isAvailable: true },
-        include: {
-          category: true,
-          options: { include: { values: true } },
-        },
-      });
-    } catch {}
+      if (!schedules || schedules.length === 0) {
+        // Initialiser avec les valeurs par défaut
+        try {
+          for (const item of DEFAULT_WEEKLY_SCHEDULE) {
+            await (prisma as any).dailyMenuSchedule.upsert({
+              where: { dayOfWeek: item.dayOfWeek },
+              update: {},
+              create: {
+                ...item,
+                productIds: JSON.stringify(item.productIds),
+              },
+            });
+          }
+          schedules = await (prisma as any).dailyMenuSchedule.findMany({
+            orderBy: { dayOfWeek: 'asc' },
+          });
+        } catch {
+          schedules = DEFAULT_WEEKLY_SCHEDULE.map(s => ({
+            ...s,
+            id: `sched_${s.dayOfWeek}`,
+            productIds: JSON.stringify(s.productIds),
+          }));
+        }
+      }
 
-    const productMap = new Map(allProducts.map(p => [p.id, p]));
-
-    const populatedSchedules = schedules.map(item => {
-      let parsedIds: string[] = [];
+      // Récupérer tous les produits pour peupler les listes
+      let allProducts: any[] = [];
       try {
-        parsedIds = typeof item.productIds === 'string' ? JSON.parse(item.productIds) : item.productIds || [];
-      } catch {
-        parsedIds = [];
-      }
+        allProducts = await prisma.product.findMany({
+          where: { isAvailable: true },
+          include: {
+            category: true,
+            options: { include: { values: true } },
+          },
+        });
+      } catch {}
 
-      const products = parsedIds.map(id => productMap.get(id)).filter(Boolean);
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
 
-      return {
-        ...item,
-        productIds: parsedIds,
-        products,
-      };
-    });
+      return schedules.map(item => {
+        let parsedIds: string[] = [];
+        try {
+          parsedIds = typeof item.productIds === 'string' ? JSON.parse(item.productIds) : item.productIds || [];
+        } catch {
+          parsedIds = [];
+        }
 
+        const products = parsedIds.map(id => productMap.get(id)).filter(Boolean);
+
+        return {
+          ...item,
+          productIds: parsedIds,
+          products,
+        };
+      });
+    }, 300); // 5 minutes en cache mémoire
+
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
     res.json({
       success: true,
       data: populatedSchedules,
@@ -165,43 +168,48 @@ export const getTodayMenu = async (req: Request, res: Response) => {
   try {
     const todayIndex = new Date().getDay(); // 0 = Dimanche, 1 = Lundi...
 
-    let schedule: any = null;
-    try {
-      schedule = await (prisma as any).dailyMenuSchedule.findUnique({
-        where: { dayOfWeek: todayIndex },
-      });
-    } catch {}
+    const todayData = await cacheService.getOrSet(`schedule:today:${todayIndex}`, async () => {
+      let schedule: any = null;
+      try {
+        schedule = await (prisma as any).dailyMenuSchedule.findUnique({
+          where: { dayOfWeek: todayIndex },
+        });
+      } catch {}
 
-    if (!schedule) {
-      schedule = DEFAULT_WEEKLY_SCHEDULE.find(s => s.dayOfWeek === todayIndex) || DEFAULT_WEEKLY_SCHEDULE[0];
-    }
+      if (!schedule) {
+        schedule = DEFAULT_WEEKLY_SCHEDULE.find(s => s.dayOfWeek === todayIndex) || DEFAULT_WEEKLY_SCHEDULE[0];
+      }
 
-    let parsedIds: string[] = [];
-    try {
-      parsedIds = typeof schedule.productIds === 'string' ? JSON.parse(schedule.productIds) : schedule.productIds || [];
-    } catch {
-      parsedIds = [];
-    }
+      let parsedIds: string[] = [];
+      try {
+        parsedIds = typeof schedule.productIds === 'string' ? JSON.parse(schedule.productIds) : schedule.productIds || [];
+      } catch {
+        parsedIds = [];
+      }
 
-    let products: any[] = [];
-    try {
-      products = await prisma.product.findMany({
-        where: { id: { in: parsedIds } },
-        include: {
-          category: true,
-          options: { include: { values: true } },
-        },
-      });
-    } catch {}
+      let products: any[] = [];
+      try {
+        products = await prisma.product.findMany({
+          where: { id: { in: parsedIds } },
+          include: {
+            category: true,
+            options: { include: { values: true } },
+          },
+        });
+      } catch {}
 
-    res.json({
-      success: true,
-      dayOfWeek: todayIndex,
-      data: {
+      return {
         ...schedule,
         productIds: parsedIds,
         products,
-      },
+      };
+    }, 300);
+
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=300');
+    res.json({
+      success: true,
+      dayOfWeek: todayIndex,
+      data: todayData,
     });
   } catch (error: any) {
     console.error('Erreur getTodayMenu :', error);
@@ -247,6 +255,8 @@ export const updateDaySchedule = async (req: Request, res: Response) => {
         isActive: isActive !== undefined ? Boolean(isActive) : true,
       },
     });
+
+    cacheService.invalidatePrefix('schedule:');
 
     // Émettre notification Socket.IO temps réel
     const io = req.app.get('io');

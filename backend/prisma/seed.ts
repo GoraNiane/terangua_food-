@@ -50,6 +50,9 @@ async function main() {
       logoUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=300&q=80',
       coverUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=80',
     },
+
+
+    
   });
 
   // 3. Utilisateurs Administrateurs (Admin, Staff, Kitchen) - Production / Réel
